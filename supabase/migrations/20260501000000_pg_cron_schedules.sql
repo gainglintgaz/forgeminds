@@ -137,14 +137,23 @@ select cron.schedule(
 -- prevents cron firing against a Vercel URL that isn't deployed yet, which
 -- would spam cron.job_run_details with HTTP errors.
 --
--- To enable after Vercel deploy + vault secret + base_url are set:
+-- We use cron.alter_job (the public API) instead of UPDATE cron.job directly
+-- because the migration role has EXECUTE on the function but not UPDATE on
+-- the table. The function is SECURITY DEFINER and routes through pg_cron's
+-- privileged owner.
 --
---   update cron.job set active = true where jobname like 'forgeminds_%';
---
--- To disable temporarily:
---
---   update cron.job set active = false where jobname like 'forgeminds_%';
-update cron.job set active = false where jobname like 'forgeminds_%';
+-- To enable after Vercel deploy + vault secret + base_url are set, either:
+--   - Per-job: select cron.alter_job(jobid, active := true) from cron.job where jobname like 'forgeminds_%';
+--   - One-shot: do $$ begin perform cron.alter_job(jobid, active := true) from cron.job where jobname like 'forgeminds_%'; end $$;
+do $$
+declare
+  j record;
+begin
+  for j in select jobid from cron.job where jobname like 'forgeminds_%'
+  loop
+    perform cron.alter_job(j.jobid, active := false);
+  end loop;
+end $$;
 
 -- ─── Verification queries (paste into SQL editor after applying) ─────
 -- List all scheduled jobs:
