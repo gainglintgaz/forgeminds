@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI scratch files (linked-project, pooler-url, version pins)
+supabase/.temp/
+
+# auto-generated session reports (post-session-enforcer hook)
+SESSION_DEBRIEF.md
+CHANGELOG.md
+STATUS_REPORT.md
+WEEKLY_INSIGHTS.md
+
+# playwright test artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -79,11 +79,14 @@ export function AddSourceDialog() {
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4">
           <Input
+            name="name"
             placeholder="Feed name (optional)"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <Input
+            name="url"
+            type="url"
             placeholder="https://example.com/rss"
             value={url}
             onChange={(e) => setUrl(e.target.value)}

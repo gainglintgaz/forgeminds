@@ -29,7 +29,10 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // The dashboard lives at "/" — `(dashboard)` is a Next.js route group
+    // (parens, not a path segment). Earlier draft pushed to "/dashboard"
+    // which 404'd; e2e auth.spec.ts caught that on 2026-04-30.
+    router.push("/");
     router.refresh();
   }
 
