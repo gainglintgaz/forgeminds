@@ -1,0 +1,95 @@
+#!/usr/bin/env sh
+# ForgeMinds pre-commit hook
+#
+# Mechanical enforcement of VIBE Rule 35 + Phase 5.5 Audit Gate.
+# Discipline failed three times on Phase 0; this hook is why it won't again.
+#
+# Gates (each blocks the commit if it fails):
+#   1. AUDIT GATE wording check — commits using "done|complete|finished|ship|deploy"
+#      must include an `AUDIT GATE` block in the message body, AND the relevant
+#      phase checklist must be 100% checked.
+#   2. tsc --noEmit on the whole project (catches what Vite skips).
+#   3. verify:columns on staged files in src/app/api/ or src/lib/pipeline/.
+#   4. Secret-pattern grep on staged files.
+#   5. ESLint on staged TS/TSX files.
+#
+# Skip with --no-verify ONLY if Victor has explicitly approved bypassing the hook.
+
+set -eu
+
+red()    { printf '\033[31m%s\033[0m\n' "$1"; }
+green()  { printf '\033[32m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+
+# ──────────────────────────────────────────────────────────────────────
+# 1. AUDIT GATE wording check
+# ──────────────────────────────────────────────────────────────────────
+COMMIT_MSG_FILE="${1:-$(git rev-parse --git-dir)/COMMIT_EDITMSG}"
+
+if [ -f "$COMMIT_MSG_FILE" ]; then
+  COMMIT_MSG="$(cat "$COMMIT_MSG_FILE")"
+  if echo "$COMMIT_MSG" | grep -Eqi '\b(done|complete|finished|ship|deploy)\b'; then
+    if ! echo "$COMMIT_MSG" | grep -q 'AUDIT GATE'; then
+      red "✗ Commit message uses 'done|complete|finished|ship|deploy' wording"
+      red "  but does not include an AUDIT GATE block in the body."
+      yellow "  Run 'npm run verify:phase-0' (or :phase-N) and paste the output block."
+      yellow "  Or rephrase the commit ('wip', 'partial', 'fix in progress', etc)."
+      exit 1
+    fi
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# 2. tsc --noEmit (project-wide; catches column drift in `as`-cast contexts
+#    that Vite/Turbopack skip)
+# ──────────────────────────────────────────────────────────────────────
+echo "▶ tsc --noEmit"
+if ! npx tsc --noEmit; then
+  red "✗ tsc --noEmit failed. Fix type errors before committing."
+  exit 1
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# 3. verify:columns on staged pipeline/api files
+# ──────────────────────────────────────────────────────────────────────
+STAGED_PIPELINE="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^src/(app/api/|lib/pipeline/)' || true)"
+if [ -n "$STAGED_PIPELINE" ]; then
+  echo "▶ verify:columns (pipeline/api files staged)"
+  if ! npx tsx scripts/verify-columns.ts; then
+    red "✗ verify:columns failed — schema drift detected."
+    yellow "  See ARCHITECTURE_NOTES.md Schema Canonical Names Reference."
+    exit 1
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# 4. Secret-pattern grep on staged files (deny-list)
+# ──────────────────────────────────────────────────────────────────────
+STAGED_ALL="$(git diff --cached --name-only --diff-filter=ACMR || true)"
+if [ -n "$STAGED_ALL" ]; then
+  # Skip .env.example legitimately containing placeholder strings
+  STAGED_FOR_SECRETS="$(echo "$STAGED_ALL" | grep -v -E '^(\.env\.example|\.husky/|.*\.lock|.*\.md)$' || true)"
+  if [ -n "$STAGED_FOR_SECRETS" ]; then
+    # shellcheck disable=SC2086
+    if echo "$STAGED_FOR_SECRETS" | xargs git show :./ 2>/dev/null | grep -E '(sk-proj-[A-Za-z0-9_-]{10,}|sbp_[a-f0-9]{40}|service_role.*eyJ[A-Za-z0-9._-]{20,})' >/dev/null 2>&1; then
+      red "✗ Suspected secret pattern in staged content (sk-proj- / sbp_ / service-role JWT)."
+      yellow "  Move the secret to .env.local (git-ignored) and rotate it."
+      exit 1
+    fi
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# 5. ESLint on staged TS/TSX files
+# ──────────────────────────────────────────────────────────────────────
+STAGED_TS="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)"
+if [ -n "$STAGED_TS" ]; then
+  echo "▶ eslint (staged ts/tsx)"
+  # shellcheck disable=SC2086
+  if ! npx eslint $STAGED_TS; then
+    red "✗ ESLint errors in staged files."
+    exit 1
+  fi
+fi
+
+green "✓ pre-commit gates passed"

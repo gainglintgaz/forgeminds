@@ -4,41 +4,78 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * FORGEMINDS DESIGN SYSTEM
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * The design tells a story of transformation:
+ *   Deep indigo  = the depths of thought, your accumulated knowledge
+ *   Warm amber   = the spark — insight, "aha", the moment you ACT
+ *   Emerald      = growth, positive outcomes, verified results
+ *   Rose/coral   = alerts, decay, things that need attention
+ *
+ * Dark mode default — knowledge workers live here.
+ * Every surface should feel like a well-organized mind:
+ *   calm, deep, with moments of brilliance.
+ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* ForgeMinds semantic colors */
+  --color-insight: var(--insight);
+  --color-insight-foreground: var(--insight-foreground);
+  --color-growth: var(--growth);
+  --color-growth-foreground: var(--growth-foreground);
+  --color-brain: var(--brain);
+  --color-brain-foreground: var(--brain-foreground);
+  --color-decay: var(--decay);
+  --color-decay-foreground: var(--decay-foreground);
+  --color-spark: var(--spark);
+  --color-spark-foreground: var(--spark-foreground);
+
+  /* Chart colors — follow the story */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Typography — Geist for clarity, mono for data */
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius — slightly rounded, not bubbly */
+  --radius: 0.625rem;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +85,134 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * LIGHT MODE — clean, airy, focused
+ * For users who prefer daytime work.
+ * Indigo primary carries through both modes.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0.014 285);
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.145 0.014 285);
+
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.145 0.014 285);
+
+  /* Primary: deep indigo — knowledge, depth */
+  --primary: oklch(0.398 0.195 277);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+
+  --secondary: oklch(0.965 0.005 285);
+  --secondary-foreground: oklch(0.25 0.02 285);
+
+  --muted: oklch(0.955 0.005 285);
+  --muted-foreground: oklch(0.50 0.02 285);
+
+  --accent: oklch(0.955 0.01 285);
+  --accent-foreground: oklch(0.25 0.02 285);
+
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+
+  --border: oklch(0.91 0.005 285);
+  --input: oklch(0.91 0.005 285);
+  --ring: oklch(0.398 0.195 277);
+
+  /* Semantic colors — light mode */
+  --insight: oklch(0.769 0.163 75);
+  --insight-foreground: oklch(0.25 0.05 75);
+  --growth: oklch(0.723 0.175 149);
+  --growth-foreground: oklch(0.20 0.05 149);
+  --brain: oklch(0.398 0.195 277);
+  --brain-foreground: oklch(0.985 0 0);
+  --decay: oklch(0.704 0.191 22);
+  --decay-foreground: oklch(0.25 0.05 22);
+  --spark: oklch(0.769 0.163 75);
+  --spark-foreground: oklch(0.25 0.05 75);
+
+  /* Charts — meaningful progression */
+  --chart-1: oklch(0.398 0.195 277);
+  --chart-2: oklch(0.769 0.163 75);
+  --chart-3: oklch(0.723 0.175 149);
+  --chart-4: oklch(0.704 0.191 22);
+  --chart-5: oklch(0.55 0.15 285);
+
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+
+  /* Sidebar — subtle indigo tint */
+  --sidebar: oklch(0.975 0.005 285);
+  --sidebar-foreground: oklch(0.145 0.014 285);
+  --sidebar-primary: oklch(0.398 0.195 277);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.955 0.01 285);
+  --sidebar-accent-foreground: oklch(0.25 0.02 285);
+  --sidebar-border: oklch(0.91 0.005 285);
+  --sidebar-ring: oklch(0.398 0.195 277);
 }
 
+/*
+ * DARK MODE (DEFAULT) — deep, focused, the mind at work
+ * Background has a subtle indigo undertone (not pure black)
+ * to feel like depth, not emptiness.
+ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --background: oklch(0.13 0.015 280);
+  --foreground: oklch(0.95 0.005 280);
+
+  --card: oklch(0.175 0.018 280);
+  --card-foreground: oklch(0.95 0.005 280);
+
+  --popover: oklch(0.175 0.018 280);
+  --popover-foreground: oklch(0.95 0.005 280);
+
+  /* Primary: lighter indigo for dark bg contrast */
+  --primary: oklch(0.65 0.2 270);
+  --primary-foreground: oklch(0.13 0.015 280);
+
+  --secondary: oklch(0.22 0.02 280);
+  --secondary-foreground: oklch(0.92 0.005 280);
+
+  --muted: oklch(0.22 0.02 280);
+  --muted-foreground: oklch(0.60 0.015 280);
+
+  --accent: oklch(0.22 0.025 280);
+  --accent-foreground: oklch(0.92 0.005 280);
+
+  --destructive: oklch(0.65 0.2 25);
+
+  --border: oklch(0.28 0.02 280);
+  --input: oklch(0.25 0.02 280);
+  --ring: oklch(0.65 0.2 270);
+
+  /* Semantic colors — dark mode */
+  --insight: oklch(0.80 0.16 80);
+  --insight-foreground: oklch(0.15 0.03 80);
+  --growth: oklch(0.75 0.18 155);
+  --growth-foreground: oklch(0.15 0.03 155);
+  --brain: oklch(0.65 0.2 270);
+  --brain-foreground: oklch(0.13 0.015 280);
+  --decay: oklch(0.70 0.17 25);
+  --decay-foreground: oklch(0.15 0.03 25);
+  --spark: oklch(0.80 0.16 80);
+  --spark-foreground: oklch(0.15 0.03 80);
+
+  /* Charts */
+  --chart-1: oklch(0.65 0.2 270);
+  --chart-2: oklch(0.80 0.16 80);
+  --chart-3: oklch(0.75 0.18 155);
+  --chart-4: oklch(0.70 0.17 25);
+  --chart-5: oklch(0.55 0.15 300);
+
+  /* Sidebar — deeper than main, feels like a panel */
+  --sidebar: oklch(0.115 0.018 280);
+  --sidebar-foreground: oklch(0.92 0.005 280);
+  --sidebar-primary: oklch(0.65 0.2 270);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-accent: oklch(0.20 0.025 280);
+  --sidebar-accent-foreground: oklch(0.92 0.005 280);
+  --sidebar-border: oklch(0.25 0.02 280);
+  --sidebar-ring: oklch(0.65 0.2 270);
 }
 
 @layer base {
@@ -126,5 +224,28 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/*
+ * ForgeMinds utility classes — reusable across the app
+ */
+@layer utilities {
+  /* Glow effect for insight/action moments */
+  .glow-insight {
+    box-shadow: 0 0 20px oklch(0.80 0.16 80 / 0.15);
+  }
+  .glow-brain {
+    box-shadow: 0 0 20px oklch(0.65 0.2 270 / 0.15);
+  }
+  .glow-growth {
+    box-shadow: 0 0 20px oklch(0.75 0.18 155 / 0.15);
+  }
+
+  /* Mono text for data/metrics */
+  .text-data {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 }
