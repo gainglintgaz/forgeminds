@@ -127,6 +127,20 @@ select cron.schedule(
   $$select private.invoke_forgeminds_cron('deliver');$$
 );
 
+-- ─── Disable all jobs by default ─────────────────────────────────────
+-- Jobs are scheduled but inactive until ops explicitly enables them. This
+-- prevents cron firing against a Vercel URL that isn't deployed yet, which
+-- would spam cron.job_run_details with HTTP errors.
+--
+-- To enable after Vercel deploy + vault secret + base_url are set:
+--
+--   update cron.job set active = true where jobname like 'forgeminds_%';
+--
+-- To disable temporarily:
+--
+--   update cron.job set active = false where jobname like 'forgeminds_%';
+update cron.job set active = false where jobname like 'forgeminds_%';
+
 -- ─── Verification queries (paste into SQL editor after applying) ─────
 -- List all scheduled jobs:
 --   select jobname, schedule, command from cron.job where jobname like 'forgeminds_%';
