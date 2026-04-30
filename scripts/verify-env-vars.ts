@@ -26,12 +26,45 @@ const ENV_EXAMPLE = resolve(process.cwd(), ".env.example");
 const ENV_LOCAL = resolve(process.cwd(), ".env.local");
 const SRC_ROOT = resolve(process.cwd(), "src");
 
-const PHASE_0_REQUIRED = new Set<string>([
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "CRON_SECRET",
-]);
+// Phase-scoped required env vars. Each phase adds to the set as new
+// functional code paths come online. The verifier checks the current phase
+// (via FORGEMINDS_PHASE env var, default = highest defined phase).
+const REQUIRED_BY_PHASE: Record<string, string[]> = {
+  "0": [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "CRON_SECRET",
+  ],
+  "1": [
+    // Resend powers /api/cron/deliver email sending in Phase 1.
+    "RESEND_API_KEY",
+    "RESEND_FROM_EMAIL",
+    // Finnhub powers /api/cron/enrich ticker quotes (already used in ingest,
+    // but enrich makes it required).
+    "FINNHUB_API_KEY",
+  ],
+};
+
+// Default to "0" so plain `npm run verify:env-vars` keeps Phase 0 semantics.
+// Phase orchestrators (verify-phase-1.ts, verify-phase-2.ts, …) set
+// FORGEMINDS_PHASE explicitly when they spawn this script as a substep.
+const CURRENT_PHASE = process.env.FORGEMINDS_PHASE ?? "0";
+
+// Union of all required vars for the current phase and all earlier phases.
+function buildRequiredSet(): Set<string> {
+  const required = new Set<string>();
+  const phases = Object.keys(REQUIRED_BY_PHASE)
+    .map(Number)
+    .filter((n) => n <= Number(CURRENT_PHASE))
+    .sort();
+  for (const p of phases) {
+    for (const v of REQUIRED_BY_PHASE[String(p)]) required.add(v);
+  }
+  return required;
+}
+
+const PHASE_REQUIRED = buildRequiredSet();
 
 function readDeclaredVars(): string[] {
   const path = existsSync(ENV_EXAMPLE) ? ENV_EXAMPLE : ENV_LOCAL;
@@ -105,25 +138,25 @@ function main() {
   console.log("");
 
   const missingRequired: string[] = [];
-  for (const v of PHASE_0_REQUIRED) {
+  for (const v of PHASE_REQUIRED) {
     if (!usage.has(v)) missingRequired.push(v);
   }
 
   if (unused.length > 0) {
-    console.log("   Unused (warning, not blocking unless Phase 0 required):");
+    console.log(`   Unused (warning, not blocking unless required at phase ${CURRENT_PHASE}):`);
     for (const v of unused) console.log(`     - ${v}`);
     console.log("");
   }
 
   if (missingRequired.length > 0) {
-    console.log("❌ verify-env-vars: Phase 0 required vars not used in src/:");
+    console.log(`❌ verify-env-vars: phase-${CURRENT_PHASE} required vars not used in src/:`);
     for (const v of missingRequired) console.log(`     - ${v}`);
     console.log("");
     console.log("   Either delete the var from .env.example or wire it up.");
     process.exit(1);
   }
 
-  console.log(`✅ verify-env-vars: all ${PHASE_0_REQUIRED.size} Phase 0 required vars wired into src/`);
+  console.log(`✅ verify-env-vars: all ${PHASE_REQUIRED.size} phase-${CURRENT_PHASE} required vars wired into src/`);
 }
 
 main();

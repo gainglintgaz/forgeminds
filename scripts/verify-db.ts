@@ -141,6 +141,15 @@ const MIGRATIONS = [
       "brain_stack_layers",
     ],
   },
+  // Migration 8 (restore_role_grants, 2026-04-29) creates no tables; it
+  // re-grants USAGE/SELECT/etc on public schema after a `drop schema cascade`
+  // wipes default Supabase grants. Verified via the JS SDK being able to
+  // query at all — if any earlier migration's signature tables work, grants
+  // are in place. Skip from MIGRATIONS list since there are no signature tables.
+  //
+  // Migration 9 (pg_cron_schedules, 2026-05-01) creates no tables; schedules
+  // cron jobs in cron.job. Verified by `select * from cron.job where jobname
+  // like 'forgeminds_%'`. Phase 1 work — verify:cron-routes confirms reachability.
 ];
 
 async function tableExists(name: string): Promise<boolean> {

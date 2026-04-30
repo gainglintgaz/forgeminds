@@ -15,12 +15,18 @@
     "verify:env-vars": "tsx scripts/verify-env-vars.ts",
     "verify:phase-0": "tsx scripts/verify-phase-0.ts",
     "verify:phase-0:no-e2e": "tsx scripts/verify-phase-0.ts --skip-e2e",
+    "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
+    "verify:pipeline-flow": "tsx scripts/verify-pipeline-flow.ts",
+    "verify:phase-1": "tsx scripts/verify-phase-1.ts",
+    "verify:phase-1:no-e2e": "tsx scripts/verify-phase-1.ts --skip-e2e",
+    "verify:phase-1:dev": "tsx scripts/verify-phase-1.ts --skip-e2e --skip-pipeline-flow",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "prepare": "husky"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
+    "@react-email/components": "^0.0.32",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "class-variance-authority": "^0.7.1",
