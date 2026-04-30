@@ -32,9 +32,18 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 -- vault extension is already loaded in default Supabase projects; leave as-is.
 
+-- ─── Schema for the helper function ────────────────────────────────
+-- The helper lives in `private` so neither anon nor authenticated can call
+-- it (it dereferences the cron_secret via vault.read_secret). Only
+-- service_role gets EXECUTE.
+create schema if not exists private;
+revoke all on schema private from public;
+grant usage on schema private to service_role;
+
 -- ─── Helper: invoke a cron route with the bearer secret ─────────────
 -- Centralizes the http_post pattern so every job stays a one-liner. Security
--- definer so ordinary roles can't read or wrap the secret outside this fn.
+-- definer so the function runs with the privileges of its owner (postgres),
+-- which can read vault secrets even when the caller (cron worker) cannot.
 create or replace function private.invoke_forgeminds_cron(step text)
 returns bigint
 language plpgsql
@@ -68,10 +77,6 @@ begin
 end;
 $$;
 
--- Make sure `private` schema exists and is locked down to service_role only.
-create schema if not exists private;
-revoke all on schema private from public;
-grant usage on schema private to service_role;
 grant execute on function private.invoke_forgeminds_cron(text) to service_role;
 
 -- ─── Unschedule prior versions (idempotent re-runs) ─────────────────
