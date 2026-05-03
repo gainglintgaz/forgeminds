@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 60;
-
-// System UUID for shared pipeline writes (Phase 0/1). Per-user enrichment is Phase 2.
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 // Money is BIGINT cents in DB (VIBE Rule 14). Convert at the boundary.
 function toCents(usd: number | null | undefined): number | null {
@@ -64,23 +62,28 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   const supabase = await createServiceClient();
 
+  const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
+
   // Open pipeline run
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "enrich", status: "running" })
+    .insert({ step_name: "enrich", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Pull tickers from today's curated briefs. ticker_symbols is text[].
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Pull tickers from this user's recent briefs (in their timezone).
+    const localToday = new Date(
+      new Date().toLocaleString("en-US", { timeZone: prefs.timezone })
+    );
+    localToday.setHours(0, 0, 0, 0);
 
     const { data: briefs, error: briefErr } = await supabase
       .from("briefs")
       .select("ticker_symbols")
-      .gte("brief_date", today.toISOString().split("T")[0])
-      .eq("user_id", SYSTEM_USER_ID);
+      .gte("brief_date", localToday.toISOString().split("T")[0])
+      .eq("user_id", userId);
 
     if (briefErr) throw briefErr;
 
@@ -123,7 +126,7 @@ export async function GET(request: Request) {
 
       const { error: upsertErr } = await supabase.from("ticker_data").upsert(
         {
-          user_id: SYSTEM_USER_ID,
+          user_id: userId,
           symbol,
           asset_type: "stock", // Phase 1 default; crypto/forex come with CoinGecko in Phase 1.5
           price_cents: toCents(quote.c),

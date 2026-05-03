@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { routeAIRequest, PROMPT_VERSION } from "@/lib/ai/router";
+import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 120;
 
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 const GENERATE_PROMPT_VERSION = "generate-v0.1";
 
 interface ArticleForBrief {
@@ -92,24 +92,28 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   const supabase = await createServiceClient();
 
+  const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
+
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "generate", status: "running" })
+    .insert({ step_name: "generate", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Find today's briefs that need a summary generated. We look for briefs
-    // with no summary_html yet, scoped to today's brief_date and the system
-    // user (Phase 1 is single-tenant pipeline).
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const briefDate = today.toISOString().split("T")[0];
+    // Find this user's briefs that need a summary generated, scoped to "today"
+    // in the user's timezone (not UTC).
+    const localToday = new Date(
+      new Date().toLocaleString("en-US", { timeZone: prefs.timezone })
+    );
+    localToday.setHours(0, 0, 0, 0);
+    const briefDate = localToday.toISOString().split("T")[0];
 
     const { data: pendingBriefs, error: briefErr } = await supabase
       .from("briefs")
       .select("id, article_ids, ticker_symbols")
-      .eq("user_id", SYSTEM_USER_ID)
+      .eq("user_id", userId)
       .eq("brief_date", briefDate)
       .is("summary_html", null);
 

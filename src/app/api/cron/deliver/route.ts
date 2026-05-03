@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { DailyBriefEmail } from "@/lib/email/templates/daily-brief";
+import { resolveUserId, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 import type { ReactElement } from "react";
 
 export const maxDuration = 60;
-
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 interface BriefForDelivery {
   id: string;
@@ -28,71 +27,57 @@ interface RecipientProfile {
 }
 
 /**
- * Resolve recipient(s) for a brief. Phase 1: brief.user_id is the SYSTEM_USER_ID
- * pipeline; the recipient is whoever subscribes to "system" briefs (currently
- * only Victor). For Phase 2 (per-user briefs), brief.user_id IS the recipient.
+ * Resolve the recipient for a brief.
  *
- * For Phase 1 we look up users with `delivery_email = true` in user_preferences
- * and email them the system brief. If no real users exist, we fall back to
- * RESEND_FROM_EMAIL itself (Victor's address per .env.local) so deliveries
- * are testable without onboarding flow being live yet.
+ * Per-user-from-day-1 model: every brief belongs to ONE user (`brief.user_id`),
+ * and that user is the recipient. We look up their auth.users email and their
+ * display_name from profiles.
+ *
+ * Special case: the SYSTEM_USER_ID pseudo-user used by the legacy system
+ * pipeline has no auth row. For that case we fall back to RESEND_FROM_EMAIL
+ * (Victor's inbox per .env.local) so the system pipeline can still email
+ * during dev / pre-onboarding.
+ *
+ * Each brief gets exactly one recipient. Multi-recipient broadcast (a Phase 8
+ * Community Brain feature) goes through a separate flow with its own table.
  */
-async function resolveRecipients(
+async function resolveRecipient(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   brief: BriefForDelivery
-): Promise<RecipientProfile[]> {
-  if (brief.user_id !== SYSTEM_USER_ID) {
-    // Phase 2 path — per-user brief, look up that one user.
-    const { data: user } = await supabase.auth.admin.getUserById(brief.user_id);
-    if (!user?.user?.email) return [];
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("user_id", brief.user_id)
-      .single();
-    return [
-      {
-        user_id: brief.user_id,
-        email: user.user.email,
-        display_name: profile?.display_name ?? null,
-      },
-    ];
+): Promise<RecipientProfile | null> {
+  // System pseudo-user → use RESEND_FROM_EMAIL fallback.
+  if (brief.user_id === SYSTEM_USER_ID) {
+    const fallback = process.env.RESEND_FROM_EMAIL;
+    if (!fallback) return null;
+    const email = fallback.match(/<([^>]+)>/)?.[1] ?? fallback;
+    return { user_id: SYSTEM_USER_ID, email, display_name: "there" };
   }
 
-  // Phase 1 path — system brief broadcast to opted-in users.
+  // Real user → look up their auth.users email + profile display name.
+  // delivery_email=false means user opted out of email delivery.
   const { data: prefs } = await supabase
     .from("user_preferences")
-    .select("user_id")
-    .eq("delivery_email", true);
-
-  const recipients: RecipientProfile[] = [];
-  for (const p of prefs ?? []) {
-    const { data: u } = await supabase.auth.admin.getUserById(p.user_id);
-    if (!u?.user?.email) continue;
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("user_id", p.user_id)
-      .single();
-    recipients.push({
-      user_id: p.user_id,
-      email: u.user.email,
-      display_name: profile?.display_name ?? null,
-    });
+    .select("delivery_email")
+    .eq("user_id", brief.user_id)
+    .maybeSingle();
+  if (prefs && prefs.delivery_email === false) {
+    return null;
   }
 
-  // Phase 1 fallback — no users yet → send to RESEND_FROM_EMAIL so Victor
-  // can verify delivery before the onboarding flow ships.
-  if (recipients.length === 0) {
-    const fallback = process.env.RESEND_FROM_EMAIL;
-    if (fallback) {
-      // Strip "Name <email@addr>" → "email@addr" if formatted that way.
-      const email = fallback.match(/<([^>]+)>/)?.[1] ?? fallback;
-      recipients.push({ user_id: SYSTEM_USER_ID, email, display_name: "Victor" });
-    }
-  }
+  const { data: user } = await supabase.auth.admin.getUserById(brief.user_id);
+  if (!user?.user?.email) return null;
 
-  return recipients;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("user_id", brief.user_id)
+    .maybeSingle();
+
+  return {
+    user_id: brief.user_id,
+    email: user.user.email,
+    display_name: profile?.display_name ?? null,
+  };
 }
 
 export async function GET(request: Request) {
@@ -114,19 +99,24 @@ export async function GET(request: Request) {
   const supabase = await createServiceClient();
   const resend = new Resend(apiKey);
 
+  const userId = resolveUserId(request);
+
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "deliver", status: "running" })
+    .insert({ step_name: "deliver", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Briefs ready to deliver: summary_html generated AND not yet delivered.
+    // Briefs ready to deliver for this user: summary_html generated AND not
+    // yet delivered. Scoped by user_id so each user's deliver tick only sends
+    // their own briefs.
     const { data: briefs, error: briefErr } = await supabase
       .from("briefs")
       .select(
         "id, user_id, title, brief_date, summary_html, summary_text, article_ids, ticker_symbols, article_count, categories_covered"
       )
+      .eq("user_id", userId)
       .not("summary_html", "is", null)
       .eq("is_delivered", false)
       .order("brief_date", { ascending: false })
@@ -155,75 +145,61 @@ export async function GET(request: Request) {
     let failedCount = 0;
 
     for (const brief of briefs as BriefForDelivery[]) {
-      const recipients = await resolveRecipients(supabase, brief);
-      if (recipients.length === 0) {
-        console.warn(`[Deliver] Brief ${brief.id}: no recipients resolved, skipping`);
+      const recipient = await resolveRecipient(supabase, brief);
+      if (!recipient) {
+        console.warn(`[Deliver] Brief ${brief.id}: no recipient resolved (user opted out or missing), skipping`);
         continue;
       }
 
-      // Track if at least one recipient succeeded — if so we mark the brief delivered.
-      let anySuccess = false;
+      try {
+        const subject = `${brief.title} — ${brief.brief_date}`;
 
-      for (const r of recipients) {
-        try {
-          const subject = `${brief.title} — ${brief.brief_date}`;
+        // Render the React Email template. Resend renders the React tree
+        // server-side into MIME html + plain text on the wire.
+        const reactEl = DailyBriefEmail({
+          recipientName: recipient.display_name ?? "there",
+          briefTitle: brief.title,
+          briefDate: brief.brief_date,
+          summaryHtml: brief.summary_html ?? "",
+          articleCount: brief.article_count ?? 0,
+          tickerSymbols: brief.ticker_symbols ?? [],
+          categoriesCovered: brief.categories_covered ?? [],
+          briefUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://forgeminds.app"}/briefs/${brief.id}`,
+        }) as ReactElement;
 
-          // Render the React Email template. The Resend SDK accepts a React
-          // element via `react:` and renders to MIME on the wire.
-          const reactEl = DailyBriefEmail({
-            recipientName: r.display_name ?? "there",
-            briefTitle: brief.title,
-            briefDate: brief.brief_date,
-            summaryHtml: brief.summary_html ?? "",
-            articleCount: brief.article_count ?? 0,
-            tickerSymbols: brief.ticker_symbols ?? [],
-            categoriesCovered: brief.categories_covered ?? [],
-            briefUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://forgeminds.app"}/briefs/${brief.id}`,
-          }) as ReactElement;
+        const { data: sendData, error: sendErr } = await resend.emails.send({
+          from: fromAddr,
+          to: recipient.email,
+          subject,
+          react: reactEl,
+          text: brief.summary_text ?? brief.title,
+        });
 
-          const { data: sendData, error: sendErr } = await resend.emails.send({
-            from: fromAddr,
-            to: r.email,
-            subject,
-            react: reactEl,
-            // Plain-text fallback for clients that strip HTML.
-            text: brief.summary_text ?? brief.title,
-          });
-
-          if (sendErr) {
-            console.error(`[Deliver] Resend error for ${r.email}:`, sendErr.message);
-            await supabase.from("delivery_log").insert({
-              user_id: r.user_id,
-              brief_id: brief.id,
-              delivery_type: "email_digest",
-              recipient: r.email,
-              status: "failed",
-              provider: "resend",
-              error_message: sendErr.message,
-            });
-            failedCount++;
-            continue;
-          }
-
+        if (sendErr) {
+          console.error(`[Deliver] Resend error for ${recipient.email}:`, sendErr.message);
           await supabase.from("delivery_log").insert({
-            user_id: r.user_id,
+            user_id: recipient.user_id,
             brief_id: brief.id,
             delivery_type: "email_digest",
-            recipient: r.email,
-            status: "sent",
+            recipient: recipient.email,
+            status: "failed",
             provider: "resend",
-            provider_message_id: sendData?.id ?? null,
+            error_message: sendErr.message,
           });
-
-          sentCount++;
-          anySuccess = true;
-        } catch (err) {
-          console.error(`[Deliver] Send failed for ${r.email}:`, (err as Error).message);
           failedCount++;
+          continue;
         }
-      }
 
-      if (anySuccess) {
+        await supabase.from("delivery_log").insert({
+          user_id: recipient.user_id,
+          brief_id: brief.id,
+          delivery_type: "email_digest",
+          recipient: recipient.email,
+          status: "sent",
+          provider: "resend",
+          provider_message_id: sendData?.id ?? null,
+        });
+
         await supabase
           .from("briefs")
           .update({
@@ -232,6 +208,11 @@ export async function GET(request: Request) {
             delivery_method: "email",
           })
           .eq("id", brief.id);
+
+        sentCount++;
+      } catch (err) {
+        console.error(`[Deliver] Send failed for ${recipient.email}:`, (err as Error).message);
+        failedCount++;
       }
     }
 

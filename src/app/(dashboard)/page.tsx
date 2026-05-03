@@ -6,21 +6,30 @@ export const revalidate = 60; // Revalidate every 60 seconds
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // Fetch recent articles (last 24 hours) from raw_articles. Phase 0 reads
-  // canonical columns: summary (not description), no entity_ids — entity
-  // resolution is a Phase 1 concern that lives on scored_articles per the
-  // schema design (see ARCHITECTURE_NOTES Schema Canonical Names Reference).
-  // This is a Server Component, so reading current time at request-time is
+  // Read the authenticated user's articles. Layout already gated this route
+  // behind login (src/app/(dashboard)/layout.tsx redirects unauth → /login),
+  // so getUser() should always resolve here.
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id;
+
+  // Fetch this user's recent articles. raw_articles is RLS-scoped to user_id
+  // so RLS would filter even if we didn't pass the eq, but we pass it
+  // explicitly because the service-role pipeline writes might use SYSTEM and
+  // we want only this user's results.
+  // This is a Server Component — reading current time at request-time is
   // correct; the react-hooks/purity rule targets client components.
   // eslint-disable-next-line react-hooks/purity
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: articles } = await supabase
-    .from("raw_articles")
-    .select("id, title, summary, url, source_name, published_at")
-    .gte("published_at", oneDayAgo)
-    .order("published_at", { ascending: false })
-    .limit(50);
+  const { data: articles } = userId
+    ? await supabase
+        .from("raw_articles")
+        .select("id, title, summary, url, source_name, published_at")
+        .eq("user_id", userId)
+        .gte("published_at", oneDayAgo)
+        .order("published_at", { ascending: false })
+        .limit(50)
+    : { data: [] };
 
   return (
     <div className="max-w-4xl mx-auto">

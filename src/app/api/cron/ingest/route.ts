@@ -7,13 +7,10 @@ import { fetchAlpacaNews } from "@/lib/pipeline/ingest/alpaca";
 import { fetchAlphaVantageNews } from "@/lib/pipeline/ingest/alpha-vantage";
 import { deduplicateArticles, generateContentHash } from "@/lib/ai/heuristics/dedup";
 import { filterRecent } from "@/lib/ai/heuristics/recency";
+import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
 import type { RawArticle } from "@/lib/types/articles";
 
 export const maxDuration = 120;
-
-// System UUID used for shared (non-user-specific) pipeline writes during Phase 0.
-// Per-user ingest is wired in Phase 1 once user_preferences drives source selection.
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 export async function GET(request: Request) {
   // Auth check
@@ -25,21 +22,28 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   const supabase = await createServiceClient();
 
-  // Log pipeline run start. step_name is a pipeline_step enum; status defaults
-  // to 'running' (run_status enum). Custom fields go in metadata jsonb.
+  // Resolve which user this run is for (?user_id= from dispatcher, or system
+  // UUID for manual curl) and load their preferences.
+  const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
+
+  // Log pipeline run start. user_id scopes the row to this user (nullable
+  // column; fine to set to system UUID for shared system pipeline runs).
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "ingest", status: "running" })
+    .insert({ step_name: "ingest", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Get all active RSS sources (sources.is_active is the canonical flag).
+    // Get this user's active RSS sources. sources.user_id scopes feeds per
+    // user — Phase 1 honors that even for the system pipeline.
     const { data: rssSources } = await supabase
       .from("sources")
       .select("url")
       .eq("type", "rss")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("user_id", userId);
 
     const rssUrls = (rssSources || [])
       .map((s) => s.url)
@@ -72,9 +76,9 @@ export async function GET(request: Request) {
     const { unique } = deduplicateArticles(allArticles);
     console.log(`After dedup: ${unique.length}`);
 
-    // Filter recent (2 hour window)
-    const { recent } = filterRecent(unique, 120);
-    console.log(`After recency: ${recent.length}`);
+    // Filter recent — window is per-user (recency_window_minutes from prefs).
+    const { recent } = filterRecent(unique, prefs.recency_window_minutes);
+    console.log(`After recency (${prefs.recency_window_minutes}min): ${recent.length}`);
 
     // Insert articles into raw_articles. Schema columns: title, url, summary,
     // source_name, source_type, raw_metadata, content_hash, user_id (NOT NULL),
@@ -85,7 +89,7 @@ export async function GET(request: Request) {
       const contentHash = generateContentHash(article);
 
       const { error } = await supabase.from("raw_articles").insert({
-        user_id: SYSTEM_USER_ID,
+        user_id: userId,
         source_type: article.sourceType,
         source_name: article.sourceName,
         title: article.title,

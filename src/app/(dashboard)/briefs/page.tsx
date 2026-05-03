@@ -5,8 +5,6 @@ import { Badge } from "@/components/ui/badge";
 
 export const revalidate = 60;
 
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
-
 interface BriefRow {
   id: string;
   title: string;
@@ -24,16 +22,21 @@ interface BriefRow {
 export default async function BriefsPage() {
   const supabase = await createClient();
 
-  // Phase 1: read system briefs (single-tenant pipeline). Phase 2 will switch
-  // to per-user briefs scoped via .eq("user_id", auth.uid()) in the query.
-  const { data: briefs } = await supabase
-    .from("briefs")
-    .select(
-      "id, title, brief_date, brief_type, article_count, ticker_symbols, categories_covered, is_delivered, delivered_at, created_at, summary_html"
-    )
-    .eq("user_id", SYSTEM_USER_ID)
-    .order("brief_date", { ascending: false })
-    .limit(30);
+  // Read the authenticated user's briefs. Dashboard layout already gates this
+  // route behind login.
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id;
+
+  const { data: briefs } = userId
+    ? await supabase
+        .from("briefs")
+        .select(
+          "id, title, brief_date, brief_type, article_count, ticker_symbols, categories_covered, is_delivered, delivered_at, created_at, summary_html"
+        )
+        .eq("user_id", userId)
+        .order("brief_date", { ascending: false })
+        .limit(30)
+    : { data: [] };
 
   const rows = (briefs ?? []) as BriefRow[];
 

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { curateStories } from "@/lib/pipeline/curator";
+import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 60;
 
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 const CURATOR_PROMPT_VERSION = "curator-v0.1";
 const CURATOR_GENERATION_MODEL = "heuristic"; // no AI in curate yet; "generate" step (Phase 1) writes summaries
 
@@ -17,24 +17,31 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   const supabase = await createServiceClient();
 
+  const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
+
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "curate", status: "running" })
+    .insert({ step_name: "curate", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Get today's scored articles. Schema: scored_articles uses created_at,
-    // article_id (not raw_article_id), and stores 0-1 fractional scores.
-    // diversity_category replaces what auto-scaffold called "category"; sentiment
-    // replaces "tone"; curation_reason replaces "reason".
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // "Today" in the user's timezone (not UTC). Daily cadence respects user
+    // locale — a Pacific-coast user shouldn't see midnight rollover at 5pm.
+    // Phase 1 keeps daily granularity; future weekly/monthly briefs come
+    // through brief_type variants.
+    const tz = prefs.timezone;
+    const localToday = new Date(
+      new Date().toLocaleString("en-US", { timeZone: tz })
+    );
+    localToday.setHours(0, 0, 0, 0);
 
     const { data: scored } = await supabase
       .from("scored_articles")
       .select("article_id, impact_score, credibility_score, novelty_score, composite_score, diversity_category, sentiment, curation_reason")
-      .gte("created_at", today.toISOString())
+      .eq("user_id", userId)
+      .gte("created_at", localToday.toISOString())
       .order("composite_score", { ascending: false });
 
     if (!scored || scored.length === 0) {
@@ -52,6 +59,8 @@ export async function GET(request: Request) {
 
     // Re-hydrate the scorer's 1-10 internal shape for the curator (which expects
     // that range). The schema stores 0-1; multiply by 10 here.
+    // Curator config (target count, max-per-category, min score) comes from
+    // user prefs — no hardcoded literals (factory rule §17 / VIBE Rule 55).
     const curated = curateStories(
       scored.map((s) => ({
         articleId: s.article_id,
@@ -62,20 +71,27 @@ export async function GET(request: Request) {
         category: s.diversity_category || "core",
         tone: s.sentiment || "neutral",
         reason: s.curation_reason || "",
-      }))
+      })),
+      {
+        targetCount: prefs.max_articles_per_brief,
+        maxPerCategory: prefs.max_per_category,
+        maxPerEntity: prefs.max_per_entity,
+        // min_composite_score is 0-1 in schema/prefs; curator expects 1-10 scale
+        minCompositeScore: prefs.min_composite_score * 10,
+      }
     );
 
     // Persist as today's daily brief. Schema columns: title (NOT NULL),
     // brief_type (default 'daily'), brief_date (NOT NULL), summary_html/text,
     // article_ids (uuid[]), ticker_symbols (text[]), article_count,
     // categories_covered, generation_model, prompt_version.
-    const briefDate = today.toISOString().split("T")[0];
+    const briefDate = localToday.toISOString().split("T")[0];
     const articleIds = curated.map((c) => c.articleId);
     const categoriesCovered = Array.from(new Set(curated.map((c) => c.category)));
 
     const { error } = await supabase.from("briefs").upsert(
       {
-        user_id: SYSTEM_USER_ID,
+        user_id: userId,
         title: `Daily Brief — ${briefDate}`,
         brief_type: "daily",
         brief_date: briefDate,
@@ -93,18 +109,19 @@ export async function GET(request: Request) {
       console.error(`[Curate] Brief save failed: ${error.message}`);
     }
 
-    // Mark curated articles as is_curated so the dashboard can prefer them.
+    // Mark this user's scored_articles as is_curated so the dashboard prefers them.
     await supabase
       .from("scored_articles")
       .update({ is_curated: true })
       .in("article_id", articleIds)
-      .eq("user_id", SYSTEM_USER_ID);
+      .eq("user_id", userId);
 
-    // Advance pipeline_status of the underlying raw_articles.
+    // Advance pipeline_status of this user's raw_articles.
     await supabase
       .from("raw_articles")
       .update({ pipeline_status: "curated" })
-      .in("id", articleIds);
+      .in("id", articleIds)
+      .eq("user_id", userId);
 
     const executionTime = Date.now() - startTime;
 

@@ -147,9 +147,13 @@ const MIGRATIONS = [
   // query at all — if any earlier migration's signature tables work, grants
   // are in place. Skip from MIGRATIONS list since there are no signature tables.
   //
-  // Migration 9 (pg_cron_schedules, 2026-05-01) creates no tables; schedules
-  // cron jobs in cron.job. Verified by `select * from cron.job where jobname
-  // like 'forgeminds_%'`. Phase 1 work — verify:cron-routes confirms reachability.
+  // Migration 9 (user_preferences_scheduling, 2026-05-01) extends the existing
+  // user_preferences table with scheduling/window columns. Verified via the
+  // schema column check below — see `verify_user_preferences_columns`.
+  //
+  // Migration 10 (pg_cron_dispatcher, 2026-05-01) creates the private.dispatch_
+  // and private.invoke_ functions and schedules 6 dispatcher cron jobs. Verified
+  // via `select count(*) from cron.job where jobname like 'forgeminds_dispatch_%'`.
 ];
 
 async function tableExists(name: string): Promise<boolean> {

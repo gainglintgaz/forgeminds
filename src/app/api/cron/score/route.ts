@@ -2,12 +2,9 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scoreArticles } from "@/lib/pipeline/scorer";
 import { PROMPT_VERSION } from "@/lib/ai/router";
+import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 120;
-
-// System UUID for shared pipeline writes during Phase 0. Per-user scoring
-// (with profile context) is Phase 1 work.
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 // Map the scorer's internal 1-10 dimensions onto the schema's 0-1 dimensions.
 // scorer.ts produces (impact, depth, viral); schema has (relevance, impact,
@@ -37,23 +34,27 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   const supabase = await createServiceClient();
 
+  const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
+
   const { data: run } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "score", status: "running" })
+    .insert({ step_name: "score", status: "running", user_id: userId })
     .select("id")
     .single();
 
   try {
-    // Get unscored articles from last 4 hours. raw_articles uses created_at
-    // (insert time), summary (not description). Filter to status='fetched'
-    // so we don't re-score already-processed rows.
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+    // Lookback window is per-user (score_lookback_minutes). Default 240min.
+    const sinceIso = new Date(
+      Date.now() - prefs.score_lookback_minutes * 60 * 1000
+    ).toISOString();
 
     const { data: articles } = await supabase
       .from("raw_articles")
       .select("id, title, summary, source_name")
       .eq("pipeline_status", "fetched")
-      .gte("created_at", fourHoursAgo)
+      .eq("user_id", userId)
+      .gte("created_at", sinceIso)
       .order("published_at", { ascending: false })
       .limit(100);
 
@@ -89,7 +90,7 @@ export async function GET(request: Request) {
       const { error } = await supabase.from("scored_articles").upsert(
         {
           article_id: score.articleId,
-          user_id: SYSTEM_USER_ID,
+          user_id: userId,
           relevance_score: toFraction(score.impactScore),
           impact_score: toFraction(score.impactScore),
           novelty_score: toFraction(score.viralScore),
