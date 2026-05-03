@@ -81,7 +81,7 @@ update private.app_config
 insert into public.sources (user_id, type, name, url, is_active, fetch_interval_minutes)
 select
   u.id::uuid,
-  source.type,
+  source.type::source_type,   -- cast text literal to ENUM
   source.name,
   source.url,
   true,
