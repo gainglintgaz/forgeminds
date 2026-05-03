@@ -4,9 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  // Default to "/" — the dashboard surface lives at the root via the
-  // (dashboard) route group; "/dashboard" is not a real path.
-  const next = searchParams.get("next") ?? "/";
+  // Default to /dashboard — that's where the authenticated app lives.
+  // Marketing landing is at /; the (dashboard) route group hosts the app at /dashboard.
+  const next = searchParams.get("next") ?? "/dashboard";
 
   if (code) {
     const supabase = await createClient();

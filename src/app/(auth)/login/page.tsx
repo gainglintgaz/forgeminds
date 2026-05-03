@@ -29,10 +29,11 @@ export default function LoginPage() {
       return;
     }
 
-    // The dashboard lives at "/" — `(dashboard)` is a Next.js route group
-    // (parens, not a path segment). Earlier draft pushed to "/dashboard"
-    // which 404'd; e2e auth.spec.ts caught that on 2026-04-30.
-    router.push("/");
+    // After login, route into the dashboard. The dashboard lives at
+    // /dashboard now (was at / earlier; that conflicted with the marketing
+    // landing page also at / — every authed user landed back on marketing
+    // because Next resolved app/page.tsx ahead of (dashboard)/page.tsx).
+    router.push("/dashboard");
     router.refresh();
   }
 

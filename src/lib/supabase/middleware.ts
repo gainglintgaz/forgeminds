@@ -31,7 +31,10 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  const publicRoutes = ["/login", "/signup", "/callback", "/pricing", "/api/health"];
+  // `/` is the marketing landing — public for unauthed visitors. The
+  // dashboard lives at /dashboard and is gated by (dashboard)/layout.tsx
+  // (server-side auth check + redirect to /login).
+  const publicRoutes = ["/", "/login", "/signup", "/callback", "/pricing", "/api/health"];
   const isPublic = publicRoutes.some(
     (route) => path === route || path.startsWith("/api/cron/") || path.startsWith("/api/seed")
   );
@@ -44,7 +47,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && (path === "/login" || path === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 

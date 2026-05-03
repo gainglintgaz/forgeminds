@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/server";
 
 function FeatureCard({
   icon: Icon,
@@ -43,7 +44,19 @@ function FeatureCard({
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Auth-aware landing: if the user is already signed in, the CTAs route
+  // straight into the app instead of forcing them through login again.
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAuthed = !!user;
+
+  // Where each CTA should route based on auth state.
+  const ctaPrimary = isAuthed ? "/dashboard" : "/signup";   // "Start Free", pricing primary CTAs
+  const ctaSecondary = isAuthed ? "/dashboard" : "/login";  // "Sign In" header link
+  const headerPrimaryLabel = isAuthed ? "Open Dashboard" : "Get Started";
+  const headerSecondaryLabel = isAuthed ? user?.email ?? "Account" : "Sign In";
+
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Nav */}
@@ -65,11 +78,11 @@ export default function LandingPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-3">
-            <Link href="/auth/login" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-              Sign In
+            <Link href={ctaSecondary} className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+              {headerSecondaryLabel}
             </Link>
-            <Link href="/auth/login" className={cn(buttonVariants({ size: "sm" }))}>
-              Get Started <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            <Link href={isAuthed ? "/dashboard" : "/signup"} className={cn(buttonVariants({ size: "sm" }))}>
+              {headerPrimaryLabel} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
@@ -99,16 +112,15 @@ export default function LandingPage() {
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link href="/auth/login" className={cn(buttonVariants({ size: "lg" }))}>
-            Start Free <ArrowRight className="ml-2 h-4 w-4" />
+          <Link href={ctaPrimary} className={cn(buttonVariants({ size: "lg" }))}>
+            {isAuthed ? "Open Dashboard" : "Start Free"} <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
           <Link href="#how-it-works" className={cn(buttonVariants({ size: "lg", variant: "outline" }))}>
             See How It Works
           </Link>
         </div>
-
         <p className="mt-4 text-xs text-muted-foreground">
-          Free tier. No credit card required. Cancel anytime.
+          {isAuthed ? "Welcome back." : "Free tier. No credit card required. Cancel anytime."}
         </p>
       </section>
 
@@ -215,7 +227,9 @@ export default function LandingPage() {
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <p className="mb-6 text-sm text-muted-foreground">Feel the value. 3 briefs per week, 1 topic, 3 sources.</p>
-                <Link href="/auth/login" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>Start Free</Link>
+                <Link href={ctaPrimary} className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
+                  {isAuthed ? "Open Dashboard" : "Start Free"}
+                </Link>
                 <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                   <li>3 intelligence briefs per week</li>
                   <li>1 topic, 3 sources</li>
@@ -234,7 +248,9 @@ export default function LandingPage() {
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <p className="mb-6 text-sm text-muted-foreground">The working professional. Create, publish, grow.</p>
-                <Link href="/auth/login" className={cn(buttonVariants(), "w-full")}>Start Building</Link>
+                <Link href={ctaPrimary} className={cn(buttonVariants(), "w-full")}>
+                  {isAuthed ? "Open Dashboard" : "Start Building"}
+                </Link>
                 <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                   <li>Unlimited briefs</li>
                   <li>10 topics, 25 sources</li>
@@ -255,7 +271,9 @@ export default function LandingPage() {
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <p className="mb-6 text-sm text-muted-foreground">Full autonomy. Deep research. Unlimited power.</p>
-                <Link href="/auth/login" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>Go Architect</Link>
+                <Link href={ctaPrimary} className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
+                  {isAuthed ? "Open Dashboard" : "Go Architect"}
+                </Link>
                 <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                   <li>Everything in Builder</li>
                   <li>Unlimited topics and sources</li>
