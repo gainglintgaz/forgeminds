@@ -58,13 +58,16 @@ end $$;
 --     'NEW_CRON_SECRET_VALUE'
 --   );
 
--- ─── 2. Base URL database parameter ───────────────────────────────────
--- Where pg_cron jobs send HTTP requests. The dispatcher uses this + the
--- vault secret to construct each per-user invoke. Change to your Vercel
--- URL once forgeminds.app is deployed.
-alter database postgres set app.forgeminds_base_url = 'https://forgeminds.app';
+-- ─── 2. Base URL config row ───────────────────────────────────────────
+-- Where pg_cron jobs send HTTP requests. The dispatcher reads this from
+-- private.app_config (created by 20260501000002_app_config_table.sql).
+-- We can't use ALTER DATABASE SET on Supabase (that requires superuser).
+update private.app_config
+   set value = 'https://forgeminds.app',
+       updated_at = now()
+ where key = 'forgeminds_base_url';
 -- For local dev with an ngrok tunnel:
---   alter database postgres set app.forgeminds_base_url = 'https://your-tunnel.ngrok.app';
+--   update private.app_config set value = 'https://your-tunnel.ngrok.app' where key = 'forgeminds_base_url';
 
 -- ─── 3. Tool capabilities seed (only if not already applied) ──────────
 -- Skip if `select count(*) from tool_capabilities` returns >0. Otherwise
@@ -153,7 +156,7 @@ select 'cron jobs active', count(*) from cron.job where jobname like 'forgeminds
 union all
 select 'vault secret exists', count(*) from vault.decrypted_secrets where name = 'cron_secret'
 union all
-select 'base_url set', case when current_setting('app.forgeminds_base_url', true) is not null then 1 else 0 end;
+select 'base_url set', case when (select value from private.app_config where key = 'forgeminds_base_url') <> '' then 1 else 0 end;
 
 -- Expected (after a successful bootstrap):
 --   sources for you          → 10
