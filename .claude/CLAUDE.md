@@ -1,5 +1,33 @@
 # ForgeMinds — Personal Intelligence OS
 
+## 🔴 AI-ASSISTED DISCOVERY PRINCIPLE (added 2026-05-04 — Phase 1.5 pivot)
+
+**ForgeMinds is an AI-first multi-tenant SaaS, not a personal pipeline.** Every user has wildly varied interests, expertise, budgets, and time. Most users do NOT know which RSS feeds, APIs, or databases would help them. The product's job is to help them figure that out — not require them to know in advance.
+
+### Three rules that follow from this
+
+1. **Conversational discovery is the default UI for any "which X do I pick?" decision.** Source selection, action template choice, voice tone tuning, threshold setting, integration setup — all use a Claude-Sonnet-backed conversational agent that asks plain-language questions and proposes options with reasoning. Manual config forms ship as power-user fallback only. (See VIBE Rule 56, factory CLAUDE.md §4 #18.)
+
+2. **No hardcoded URLs, API keys, or user-specific config in seed scripts.** `supabase/seeds/*` contains ONLY project-level operational config (vault secrets, GUCs, reference catalogs). User data lives behind app UI. The pre-2026-05-04 `phase-1-bootstrap.sql` violated this by inserting Victor's 10 RSS feeds as hardcoded INSERTs; replaced by `phase-1-project-bootstrap.sql` which contains zero user data.
+
+3. **Per-user routes call APIs ONLY for source types the user has.** Pre-2026-05-04 `/api/cron/ingest` called `fetchFinnhub/Benzinga/Alpaca/AlphaVantage` for every user, every tick, regardless of preferences — burning shared API quota for users who never asked for financial news. Refactored 2026-05-04 to read user's `sources` rows, group by `type`, only invoke fetchers per-type-present. **Constant API call count per user is a bug.** (See lessons.md #98.)
+
+### What this requires
+
+- **Source catalog table** (Phase 1.5) — curated database of ~300-500 sources with category/subcategory/paywall/quality metadata
+- **Source-catalog-curator subagent** at `.claude/agents/source-catalog-curator.md` — researches and proposes new catalog entries with verified URLs
+- **Source-validator subagent** at `.claude/agents/source-validator.md` — validates user-submitted URLs at runtime to prevent hallucinated sources
+- **Conversational onboarding agent** (Phase 1.5) at `/onboarding/*` — Claude Sonnet + RAG over catalog + streaming UI
+- **Sources page redesign** (Phase 1.5) — catalog browser + AI suggestions panel + chat advisor sidebar + power-user "Add custom" fallback
+
+### Reference
+
+- Roadmap pivot: `C:\Users\vtbsj\.claude\plans\sparkling-waddling-pinwheel.md` "🔴 PIVOT (2026-05-04)" section
+- Factory rules: VIBE Rule 56, factory CLAUDE.md §4 #17 + #18
+- Lessons: lessons.md #97 (paste-10-URLs reflex), #98 (constant API calls)
+
+---
+
 ## 🔴 PHASE COMPLETION ENFORCEMENT (added 2026-04-29 after Phase 0 audit failure)
 
 **This project failed Phase 0 three times by declaring "done" without verification.** The schema migrated successfully but auto-scaffolded code referenced wrong column names. Build compiled; runtime would have crashed on every API call.

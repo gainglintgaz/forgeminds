@@ -195,3 +195,31 @@ Connect to Alpaca/Robinhood, execute trades based on Trust Escalation autonomy.
 ## 🟡 [2026-04-29] Successful Examples folder pattern (from Cowork article)
 **Why interesting:** User uploads their best emails, posts, proposals to a `successful_examples/` folder. Voice DNA learns from wins, not just edit diffs. Better calibration of "what works for this user."
 **Status:** ADOPT in Voice DNA design (Phase 4). Add `voice_examples` table later.
+
+## 🟡 [2026-05-04] Source catalog visible on marketing landing as discovery preview
+**Why interesting:** Marketing page could show a slider: "Pick your interests → see what ForgeMinds would suggest." Builds trust before signup; demonstrates the conversational agent without requiring auth.
+**Status:** DEFER to Phase 10 productization or Phase 1.5 stretch goal. Don't block Phase 1.5 close on this.
+
+## 🟡 [2026-05-04] LinkedIn-driven source suggestions (when user connects)
+**Why interesting:** OAuth-import a user's LinkedIn profile (headline, industry, company, role) → AI agent uses that as priors. "I see you're VP Engineering at a fintech — here are sources VPs in fintech read."
+**Status:** DEFER to Phase 9 (Watchers/Agents) or Phase 4 (Brain) — needs OAuth flow + LinkedIn API access (rate-limited; OAuth token refresh complexity).
+
+## 🟡 [2026-05-04] Power-user "config-only mode" toggle
+**Why interesting:** 5% of users WILL know exactly which RSS/API endpoints they want. Force them through the conversational agent and they bounce. Settings → "Config Mode" exposes raw form everywhere (sources, prefs, custom APIs).
+**Status:** DEFER to Phase 1.5 or Phase 2. The "Add custom" fallback in /sources covers most of this; full config-mode is a stretch.
+
+## 🟡 [2026-05-04] Multi-language source catalog
+**Why interesting:** Phase 1.5 catalog starts English-only. Big markets (Spanish, Portuguese, Mandarin, Hindi, Arabic) have different source ecosystems. Catalog needs `language[]` filter + curator subagent runs per-language.
+**Status:** DEFER to Phase 10. English-first for V1 launch; multi-language is internationalization work that fits productization timing.
+
+## 🟡 [2026-05-04] OAuth-imported source bundles (Substack reading list, Feedly OPML, etc.)
+**Why interesting:** Users with existing source tools (Feedly, Reeder, Substack) have hand-curated reading lists. Importing those during onboarding short-circuits the conversational discovery for power users.
+**Status:** DEFER to Phase 1.5 stretch or Phase 2. Common formats: OPML (universal), Substack notes API, Feedly export.
+
+## 🟡 [2026-05-04] Source quality score learning (community-driven)
+**Why interesting:** Initial catalog `quality_score` is curated. Phase 8 (Community Brain) can learn it from save/dismiss patterns: high-save sources get higher quality, sources users dismiss en masse get lower.
+**Status:** DEFER to Phase 8. Phase 1.5 ships with curated scores; Phase 8 makes them adaptive.
+
+## 🟢 [2026-05-04] Agent-suggested action templates from source content
+**Why interesting:** When a user adds a source about "biotech earnings," the agent can pre-suggest action templates ("track quarterly earnings → draft summary content"). Bridges Phase 1.5 source picking to Phase 3 action templates.
+**Status:** ADOPT in Phase 3 design. Action templates should be discoverable via the same conversational interface used for sources.

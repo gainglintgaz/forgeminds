@@ -336,6 +336,83 @@ After any `drop schema public cascade`, all GRANTs on `anon`/`authenticated`/`se
 
 ---
 
+## Per-User Source Iteration Pattern (Phase 1 closure refactor — 2026-05-04)
+
+The ingest route had a multi-tenant violation: it called `fetchFinnhubNews()` + `fetchBenzingaNews()` + `fetchAlpacaNews()` + `fetchAlphaVantageNews()` unconditionally for every user, every pipeline tick. Users got financial news whether they wanted it or not, and shared-API-key quota got burned for users who never asked.
+
+**Correct pattern (post-2026-05-04):**
+
+```typescript
+// 1. Read the user's active sources
+const { data: sources } = await supabase
+  .from("sources")
+  .select("type, url, config")
+  .eq("user_id", userId)
+  .eq("is_active", true);
+
+// 2. Group by source type
+const byType = new Map<string, Source[]>();
+for (const s of sources ?? []) {
+  if (!byType.has(s.type)) byType.set(s.type, []);
+  byType.get(s.type)!.push(s);
+}
+
+// 3. Only invoke fetchers for types the user has
+const fetcherCalls: Promise<FetchResult>[] = [];
+if (byType.has("rss"))    fetcherCalls.push(fetchAllRSSFeeds(byType.get("rss")!.map(s => s.url!)));
+if (byType.has("finnhub"))     fetcherCalls.push(fetchFinnhubNews(byType.get("finnhub")!));
+if (byType.has("benzinga"))    fetcherCalls.push(fetchBenzingaNews(byType.get("benzinga")!));
+// ... etc per type ...
+
+const results = await Promise.all(fetcherCalls);
+```
+
+**Tripwire** (per lesson #98): if you can count API calls per request and the count is CONSTANT regardless of which user invoked, the route is global, not per-user. Constant-count = bug.
+
+**Where this lives:**
+- `src/app/api/cron/ingest/route.ts` — the ingest orchestrator (refactored 2026-05-04)
+- `src/lib/pipeline/ingest/{rss,finnhub,benzinga,alpaca,alpha-vantage,coingecko}.ts` — each fetcher takes a per-source config (not hardcoded "general" news)
+- `src/lib/pipeline/user-prefs.ts` — `loadPrefs()` + `resolveUserId()` helpers reused by all routes
+
+---
+
+## Source Catalog Architecture (Phase 1.5 — to be built)
+
+For the AI-assisted source discovery agent, ForgeMinds maintains a curated catalog of ~300-500 sources organized by category/subcategory/paywall/quality. Catalog is **public read** (every user sees the same options), **service_role write** (only the source-catalog-curator subagent updates it).
+
+```
+source_catalog
+├── id (uuid)
+├── name              "Nature Medicine"
+├── type              source_type ENUM (rss / finnhub / x_list / reddit_subreddit / custom_api / ...)
+├── url               feed/API endpoint
+├── description       one-sentence summary the agent shows users
+├── categories[]      top-level: medicine, finance, sciences, education, ...
+├── subcategories[]   granular: oncology, monetary_policy, F1, classical_music
+├── paywall_tier      'free' | 'freemium' | 'paid' | 'byos'
+├── paywall_cost_usd_monthly
+├── update_cadence    'realtime' | 'hourly' | 'daily' | 'weekly'
+├── geography[]       'us' | 'eu' | 'global' | 'cn' | language codes
+├── quality_score     0-1 (curated initially, learned post-Phase 8)
+├── requires_oauth
+├── oauth_provider    NULL or reddit/x/youtube/discord
+├── recommended_for_topics[]  (for RAG matching)
+└── embedding         vector(1536)  (semantic search by user intent)
+```
+
+**Conversational agent stack:**
+- Claude Sonnet for the user conversation (~$0.045/onboarding-run, prompt-cached catalog)
+- RAG context: full catalog (~50K tokens) cached via Anthropic prompt caching
+- Streaming responses via Vercel AI SDK
+- Intent extraction: structured-output prompts → topics, depth_pref, cadence_pref, paywall_pref, geography
+- Source selection: vector similarity (catalog embeddings vs intent embedding) + filter by paywall_tier ≤ user-comfort + filter by paywall_tier ≤ tier-cap
+
+**Subagents (Claude Code):**
+- `.claude/agents/source-catalog-curator.md` — researches + proposes new catalog entries with verified URLs, outputs SQL INSERTs
+- `.claude/agents/source-validator.md` — validates user-submitted URLs at runtime (RSS/Atom parse, sample item extract, safety verdict)
+
+---
+
 ## Update protocol
 
 When you make an architectural decision:

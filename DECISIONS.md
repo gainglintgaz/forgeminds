@@ -271,3 +271,37 @@ alter default privileges for role postgres in schema public grant all on tables/
 - Factory rules: `lessons.md` #93-96, `vibe-standard.md` Rule 35, `execution.md` Phase 5.5
 - Project: `.claude/CLAUDE.md` "🔴 PHASE COMPLETION ENFORCEMENT" section
 - Schema canonical names: `ARCHITECTURE_NOTES.md` "Schema Canonical Names Reference" section
+
+---
+
+## 2026-05-04 — Phase 1.5 redefined as AI-Assisted Source Discovery Agent
+
+**What happened:** Phase 1 was scoped to "replace Victor's Pipedream loop" with the implicit assumption that Victor (and future users) would manually paste RSS URLs into a `/sources` form. Pivot: that's a personal-pipeline mindset that doesn't survive multi-tenant. Real users have wildly varied interests, expertise, and budgets — most will not know which RSS feeds, APIs, or databases exist for their domain.
+
+**Decision:** Two principle additions, captured at factory level so every VictorForge project benefits:
+
+1. **VIBE Rule 56 + factory CLAUDE.md §4 #18 — AI-Assisted Discovery as Default UI.** When the user faces a "which X do I pick?" decision and X is a domain they may not know, the first interface is a conversational AI agent. Manual config forms ship as power-user fallback only.
+
+2. **Lessons #97-98** — caught patterns: "the paste-10-URLs reflex doesn't survive multi-tenant" and "constant API call count per user is a bug."
+
+**Phase 1 closure revised:** drops the requirement to seed user-specific source data. New goal: "the pipeline infrastructure is ready and dormant until users tell it what to do." Phase 1 ends with project-only bootstrap (`supabase/seeds/phase-1-project-bootstrap.sql`), zero user sources. Articles only flow after Phase 1.5 ships.
+
+**Phase 1.5 redefined:** REPLACES the "catalog picker" framing with a full conversational AI source-discovery agent:
+- Curated source catalog (~300-500 sources, ~10 categories, paywall-aware)
+- Conversational onboarding agent (Claude Sonnet + RAG + streaming UI)
+- Source-catalog-curator Claude Code subagent for ongoing catalog growth (`.claude/agents/source-catalog-curator.md`)
+- Source-validator Claude Code subagent for runtime URL validation (`.claude/agents/source-validator.md`)
+- Sources page redesign (catalog browser + suggestions + chat sidebar + power-user fallback)
+- Source advisor + health monitoring cron jobs
+- Paywall / BYOS handling
+
+**Estimated effort:** ~16 sessions (was 9; updated for conversational quality bar + paywall + validation + ongoing assistance).
+
+**Hardcoded values fixed before Phase 1 closes:**
+- `/api/cron/ingest` refactored to call API fetchers ONLY for users with active `sources` rows of that type. Pre-pivot it called Finnhub/Benzinga/Alpaca/AlphaVantage unconditionally for every user, every tick — violation of multi-tenant principle + shared-quota burn.
+- `phase-1-bootstrap.sql` (with Victor's email + 10 RSS feed inserts) replaced by `phase-1-project-bootstrap.sql` (project infra only, no user data).
+
+**Reference:**
+- Plan: `sparkling-waddling-pinwheel.md` "🔴 PIVOT (2026-05-04)" section
+- Project rule: `.claude/CLAUDE.md` "🔴 AI-ASSISTED DISCOVERY PRINCIPLE" section
+- Factory rules: VIBE Rule 56, CLAUDE.md §4 #18, lessons.md #97 + #98
