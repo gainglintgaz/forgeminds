@@ -305,3 +305,39 @@ alter default privileges for role postgres in schema public grant all on tables/
 - Plan: `sparkling-waddling-pinwheel.md` "🔴 PIVOT (2026-05-04)" section
 - Project rule: `.claude/CLAUDE.md` "🔴 AI-ASSISTED DISCOVERY PRINCIPLE" section
 - Factory rules: VIBE Rule 56, CLAUDE.md §4 #18, lessons.md #97 + #98
+
+---
+
+## 2026-05-04 — Phase 1 audit + Blocker 5 explicitly deferred to Phase 1.5
+
+**What happened:** ran the `phase-auditor` subagent (commit `e631bb5`) on Phase 1 before declaring it complete. Found 7 blockers. Fixed 5 of them in this session; deferred 1 (Blocker 5 — per-source-config fetcher refactor) to Phase 1.5; left 1 (Blocker 2 — Victor pastes bootstrap SQL) as a pending manual step.
+
+**Decision: Blocker 5 deferral**
+
+The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpacaNews()`, `fetchAlphaVantageNews()` take no source config and hardcode `category=general` in their URLs. Even after Blocker 1's source-presence gating, two users with Finnhub sources cannot have different category preferences or different API keys.
+
+**Why deferred to Phase 1.5:**
+
+1. **No user has these source types yet.** Phase 1's revised closure is "pipeline dormant until users tell it what to do" — the AI-Assisted Source Discovery agent (Phase 1.5) is what enables users to add Finnhub/Benzinga/etc sources. Until then, no user has rows of those types, so the fetchers never fire (per Blocker 1's gating).
+
+2. **The fix is intertwined with Phase 1.5's source catalog architecture.** Per-source config requires deciding: where does category live (catalog row default? user override? both?), where does API key live (shared env var? user's BYOS encrypted secret?), how does the catalog represent finance-API endpoints. All of these are Phase 1.5 design decisions.
+
+3. **Doing it in Phase 1 risks rework.** Building the wrong abstraction now means refactoring it again in Phase 1.5. Better to design it once with the catalog in mind.
+
+**What's actually shipping in Phase 1 for these 4 source types:**
+
+- The fetchers exist and work with shared env-var API keys (legacy of Phase 0/1 scaffolding)
+- The ingest route gates them by source-type presence (Blocker 1 fix). User with zero Finnhub sources → zero Finnhub fetcher calls.
+- The 4 source types remain in the `source_type` enum. Phase 1.5 source catalog will populate `source_catalog` rows for them with proper config schema.
+
+**What Phase 1.5 must do:**
+
+- Define `SourceConfig` type (api_key, category, tickers, rate_limit_hint, etc.)
+- Refactor 4 fetchers to take `(config: SourceConfig)`
+- Source catalog rows for finance APIs include default config
+- BYOS flow for paid-tier users to plug their own API keys (currently shared)
+
+**Reference:**
+- Audit file: `.claude/checklists/phase-1-audit-2026-05-04.md` Blocker 5
+- Plan: `sparkling-waddling-pinwheel.md` Phase 1.5 §5 + §C
+- Tracking: ARCHITECTURE_NOTES.md "Per-User Source Iteration Pattern"

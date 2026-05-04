@@ -31,6 +31,11 @@ export interface PipelinePrefs {
   max_articles_per_brief: number;
   max_per_category: number;
   max_per_entity: number;
+  // Pagination + batch-size knobs (audit Blocker 6, migration 20260504000000)
+  score_batch_size: number;
+  deliver_batch_size: number;
+  briefs_page_size: number;
+  dashboard_feed_size: number;
 }
 
 // Defaults match what was hardcoded in the routes before the per-user redesign.
@@ -48,6 +53,10 @@ export const DEFAULT_PREFS: Omit<PipelinePrefs, "user_id"> = {
   max_articles_per_brief: 15,
   max_per_category: 3,
   max_per_entity: 2,
+  score_batch_size: 100,
+  deliver_batch_size: 20,
+  briefs_page_size: 30,
+  dashboard_feed_size: 50,
 };
 
 export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -82,7 +91,7 @@ export async function loadPrefs(
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity"
+      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size"
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -104,5 +113,9 @@ export async function loadPrefs(
     max_articles_per_brief: data?.max_articles_per_brief ?? DEFAULT_PREFS.max_articles_per_brief,
     max_per_category: data?.max_per_category ?? DEFAULT_PREFS.max_per_category,
     max_per_entity: data?.max_per_entity ?? DEFAULT_PREFS.max_per_entity,
+    score_batch_size: data?.score_batch_size ?? DEFAULT_PREFS.score_batch_size,
+    deliver_batch_size: data?.deliver_batch_size ?? DEFAULT_PREFS.deliver_batch_size,
+    briefs_page_size: data?.briefs_page_size ?? DEFAULT_PREFS.briefs_page_size,
+    dashboard_feed_size: data?.dashboard_feed_size ?? DEFAULT_PREFS.dashboard_feed_size,
   };
 }

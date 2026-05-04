@@ -8,9 +8,22 @@ import { fetchAlphaVantageNews } from "@/lib/pipeline/ingest/alpha-vantage";
 import { deduplicateArticles, generateContentHash } from "@/lib/ai/heuristics/dedup";
 import { filterRecent } from "@/lib/ai/heuristics/recency";
 import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
-import type { RawArticle } from "@/lib/types/articles";
+import type { RawArticle, FetchResult } from "@/lib/types/articles";
 
 export const maxDuration = 120;
+
+const EMPTY_FETCH_RESULT: FetchResult = {
+  source: "n/a",
+  success: true,
+  items: [],
+};
+
+const EMPTY_RSS_RESULT = {
+  articles: [] as RawArticle[],
+  successCount: 0,
+  errorCount: 0,
+  errors: [] as string[],
+};
 
 export async function GET(request: Request) {
   // Auth check
@@ -27,8 +40,7 @@ export async function GET(request: Request) {
   const userId = resolveUserId(request);
   const prefs = await loadPrefs(supabase, userId);
 
-  // Log pipeline run start. user_id scopes the row to this user (nullable
-  // column; fine to set to system UUID for shared system pipeline runs).
+  // Log pipeline run start.
   const { data: run } = await supabase
     .from("pipeline_runs")
     .insert({ step_name: "ingest", status: "running", user_id: userId })
@@ -36,54 +48,109 @@ export async function GET(request: Request) {
     .single();
 
   try {
-    // Get this user's active RSS sources. sources.user_id scopes feeds per
-    // user — Phase 1 honors that even for the system pipeline.
-    const { data: rssSources } = await supabase
+    // Read this user's active sources, grouped by type. Per-user-from-day-1
+    // (factory CLAUDE.md §17, VIBE Rule 55) and constant-API-call check
+    // (lessons.md #98): we only call a fetcher when the user has at least
+    // one active source row of that type. Pre-2026-05-04 the route called
+    // Finnhub/Benzinga/Alpaca/AlphaVantage unconditionally for every user,
+    // every tick — burning shared API quota for users who never asked.
+    const { data: sources } = await supabase
       .from("sources")
-      .select("url")
-      .eq("type", "rss")
-      .eq("is_active", true)
-      .eq("user_id", userId);
+      .select("type, url, config")
+      .eq("user_id", userId)
+      .eq("is_active", true);
 
-    const rssUrls = (rssSources || [])
+    const byType = new Map<string, Array<{ url: string | null; config: unknown }>>();
+    for (const s of sources ?? []) {
+      const arr = byType.get(s.type) ?? [];
+      arr.push({ url: s.url, config: s.config });
+      byType.set(s.type, arr);
+    }
+
+    // RSS fetcher takes a URL list. Other fetchers currently take no args
+    // and use shared env-var API keys + hardcoded "general" category. The
+    // per-source-config refactor (each user picks category / tickers / their
+    // own API key) is Phase 1.5 work — see DECISIONS.md 2026-05-04 (Blocker 5
+    // deferred). Phase 1 only needs source-presence gating to honor the
+    // multi-tenant principle, not full config customization.
+    const rssUrls = (byType.get("rss") ?? [])
       .map((s) => s.url)
       .filter((u): u is string => !!u);
 
-    // Fetch all sources in parallel
-    const [rssResult, finnhubResult, benzingaResult, alpacaResult, alphaVantageResult] =
-      await Promise.all([
-        rssUrls.length > 0
-          ? fetchAllRSSFeeds(rssUrls)
-          : { articles: [] as RawArticle[], successCount: 0, errorCount: 0, errors: [] as string[] },
-        fetchFinnhubNews(),
-        fetchBenzingaNews(),
-        fetchAlpacaNews(),
-        fetchAlphaVantageNews(),
-      ]);
+    const fetcherTasks: Array<Promise<{ source: string; result: FetchResult | typeof EMPTY_RSS_RESULT }>> = [];
 
-    // Combine all articles
-    const allArticles = [
-      ...rssResult.articles,
-      ...finnhubResult.items,
-      ...benzingaResult.items,
-      ...alpacaResult.items,
-      ...alphaVantageResult.items,
-    ];
+    if (rssUrls.length > 0) {
+      fetcherTasks.push(fetchAllRSSFeeds(rssUrls).then((r) => ({ source: "rss", result: r })));
+    }
+    if (byType.has("finnhub")) {
+      fetcherTasks.push(fetchFinnhubNews().then((r) => ({ source: "finnhub", result: r })));
+    }
+    if (byType.has("benzinga")) {
+      fetcherTasks.push(fetchBenzingaNews().then((r) => ({ source: "benzinga", result: r })));
+    }
+    if (byType.has("alpaca")) {
+      fetcherTasks.push(fetchAlpacaNews().then((r) => ({ source: "alpaca", result: r })));
+    }
+    if (byType.has("alpha_vantage")) {
+      fetcherTasks.push(fetchAlphaVantageNews().then((r) => ({ source: "alpha_vantage", result: r })));
+    }
 
-    console.log(`Fetched ${allArticles.length} total articles`);
+    const results = await Promise.all(fetcherTasks);
+
+    // Combine all articles. Each fetcher result has either `.articles` (RSS)
+    // or `.items` (FetchResult). Normalize to a single list.
+    const allArticles: RawArticle[] = [];
+    const fetcherStats: Record<string, unknown> = {};
+    for (const { source, result } of results) {
+      if ("articles" in result) {
+        // RSS shape
+        allArticles.push(...result.articles);
+        fetcherStats[`${source}_ok`] = result.successCount;
+        fetcherStats[`${source}_err`] = result.errorCount;
+      } else {
+        // FetchResult shape
+        allArticles.push(...result.items);
+        fetcherStats[source] = result.success;
+        if (result.error) fetcherStats[`${source}_error`] = result.error;
+      }
+    }
+
+    console.log(`[Ingest] User ${userId.slice(0, 8)}… fetched ${allArticles.length} from ${results.length} source type(s)`);
+
+    // Empty-handling: if user has no sources, log a clean run with note +
+    // exit early. (verify:cron-empty-handling tests this contract.)
+    if (results.length === 0) {
+      const executionTime = Date.now() - startTime;
+      if (run?.id) {
+        await supabase
+          .from("pipeline_runs")
+          .update({
+            status: "completed",
+            items_processed: 0,
+            items_created: 0,
+            duration_ms: executionTime,
+            completed_at: new Date().toISOString(),
+            metadata: { note: "no active sources for user" },
+          })
+          .eq("id", run.id);
+      }
+      return NextResponse.json({
+        message: "no active sources for user — nothing to ingest",
+        items_processed: 0,
+        items_created: 0,
+        executionTimeMs: executionTime,
+      });
+    }
 
     // Deduplicate
     const { unique } = deduplicateArticles(allArticles);
-    console.log(`After dedup: ${unique.length}`);
 
     // Filter recent — window is per-user (recency_window_minutes from prefs).
     const { recent } = filterRecent(unique, prefs.recency_window_minutes);
-    console.log(`After recency (${prefs.recency_window_minutes}min): ${recent.length}`);
 
     // Insert articles into raw_articles. Schema columns: title, url, summary,
     // source_name, source_type, raw_metadata, content_hash, user_id (NOT NULL),
-    // pipeline_status (defaults to 'fetched'). Entity resolution happens in the
-    // score step where entity_ids live on scored_articles per the schema design.
+    // pipeline_status (defaults to 'fetched').
     let insertedCount = 0;
     for (const article of recent) {
       const contentHash = generateContentHash(article);
@@ -94,13 +161,12 @@ export async function GET(request: Request) {
         source_name: article.sourceName,
         title: article.title,
         url: article.url,
-        summary: article.description, // wire-shape "description" → schema "summary"
+        summary: article.description,
         content_hash: contentHash,
         published_at: article.publishedAt || new Date().toISOString(),
         raw_metadata: article.metadata || {},
       });
 
-      // 23505 = unique violation (already exists) — skip silently per VIBE Rule 37
       if (error && error.code !== "23505") {
         console.error(`Insert error for "${article.title}": ${error.message}`);
       } else if (!error) {
@@ -110,10 +176,6 @@ export async function GET(request: Request) {
 
     const executionTime = Date.now() - startTime;
 
-    // Update pipeline run. Canonical names:
-    //   step → step_name (already set above), items_in → items_processed,
-    //   items_out → items_created, execution_time_ms → duration_ms.
-    // Per-source counters live in metadata jsonb (no dedicated columns).
     if (run?.id) {
       await supabase.from("pipeline_runs").update({
         status: "completed",
@@ -122,12 +184,8 @@ export async function GET(request: Request) {
         duration_ms: executionTime,
         completed_at: new Date().toISOString(),
         metadata: {
-          rss_ok: rssResult.successCount,
-          rss_err: rssResult.errorCount,
-          finnhub: finnhubResult.success,
-          benzinga: benzingaResult.success,
-          alpaca: alpacaResult.success,
-          alpha_vantage: alphaVantageResult.success,
+          source_types_invoked: results.map((r) => r.source),
+          ...fetcherStats,
         },
       }).eq("id", run.id);
     }
@@ -137,6 +195,7 @@ export async function GET(request: Request) {
       unique: unique.length,
       recent: recent.length,
       inserted: insertedCount,
+      sourceTypesInvoked: results.map((r) => r.source),
       executionTimeMs: executionTime,
     });
   } catch (error) {
@@ -155,3 +214,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// EMPTY_FETCH_RESULT exists for type-checking parity; not used in current
+// flow because we omit the fetcher entirely when source-type is absent.
+void EMPTY_FETCH_RESULT;

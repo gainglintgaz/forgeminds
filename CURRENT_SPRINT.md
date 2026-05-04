@@ -1,9 +1,38 @@
 # ForgeMinds — Current Sprint
 
-## Phase 0: Foundation
-**Status:** 7/8 GATES PASSING (e2e remaining) — structurally verified 2026-04-30
+## Phase 1: Pipeline Infrastructure (CURRENT — pending close)
+**Status:** Audit complete (7 blockers identified, fixes in flight) — 2026-05-04
+**Started:** 2026-04-30 (after Phase 0 closed)
+**Last update:** 2026-05-04
+
+**Revised closure criteria (DECISIONS.md 2026-05-04):** "Pipeline infrastructure is ready and dormant until users tell it what to do — and the pipeline genuinely does nothing until they do." Articles only flow after Phase 1.5 (AI-Assisted Source Discovery) ships.
+
+### Phase 1 audit findings (commit `e631bb5`, audit file `.claude/checklists/phase-1-audit-2026-05-04.md`)
+
+| # | Blocker | Status |
+|---|---|---|
+| 1 | `/api/cron/ingest` calls 4 paid news APIs unconditionally for every user | ✅ FIXED — gated by source-type presence |
+| 2 | Project bootstrap SQL not yet applied to dev DB | ⏳ MANUAL — Victor pastes once |
+| 3 | `verify:pipeline-flow` hard-fails when pipeline is correctly dormant | ✅ FIXED — replaced by `verify:cron-empty-handling` |
+| 4 | `verify:cron-empty-handling` script missing | ✅ FIXED — `scripts/verify-cron-empty-handling.ts` shipped |
+| 5 | Fetcher refactor (per-source config) hardcodes "general" category | 🟡 DEFERRED — Phase 1.5 work (no user has these source types yet; gating in Blocker 1 fix prevents harm) |
+| 6 | 4 hardcoded `.limit(...)` UX values (score 100, deliver 20, briefs 30, feed 50) | ✅ FIXED — migration `20260504000000_user_preferences_pagination.sql` + routes wire prefs |
+| 7 | `CURRENT_SPRINT.md` stale (Phase 0-only) | ✅ FIXED — this update |
+
+**Remaining for Phase 1 close:**
+1. ⏳ Victor pastes `supabase/seeds/phase-1-project-bootstrap.sql` once (vault secret + base_url + cron jobs active)
+2. ⏳ Victor runs Supabase advisor scan (security + performance), confirms 0 critical findings
+3. ⏳ Re-run `phase-auditor` subagent → confirm zero blockers
+4. ⏳ Run `npm run verify:phase-1` (with dev server) → green
+5. ⏳ Run Playwright e2e once dev server is up → 4/4 specs pass
+6. ⏳ `feat: phase 1 complete` commit with AUDIT GATE + PHASE AUDIT blocks in body
+
+---
+
+## Phase 0: Foundation (DONE — commit `d09300a`, 2026-04-30)
+**Status:** ✅ COMPLETE — all 8 gates green
 **Started:** 2026-04-13
-**Last update:** 2026-04-30 (post-fix verification)
+**Closed:** 2026-04-30 (all 8 verify:phase-0 gates green)
 
 **State as of 2026-04-30:** Phase B column-drift fixes complete and mechanically verified. All 7 structural gates pass:
 

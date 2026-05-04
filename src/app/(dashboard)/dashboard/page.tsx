@@ -21,6 +21,16 @@ export default async function DashboardPage() {
   // eslint-disable-next-line react-hooks/purity
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
+  // Page size from user_preferences (audit Blocker 6 — no hardcoded UX limits).
+  const { data: prefsRow } = userId
+    ? await supabase
+        .from("user_preferences")
+        .select("dashboard_feed_size")
+        .eq("user_id", userId)
+        .maybeSingle()
+    : { data: null };
+  const feedSize = prefsRow?.dashboard_feed_size ?? 50;
+
   const { data: articles } = userId
     ? await supabase
         .from("raw_articles")
@@ -28,7 +38,7 @@ export default async function DashboardPage() {
         .eq("user_id", userId)
         .gte("published_at", oneDayAgo)
         .order("published_at", { ascending: false })
-        .limit(50)
+        .limit(feedSize)
     : { data: [] };
 
   return (

@@ -16,10 +16,10 @@
     "verify:phase-0": "tsx scripts/verify-phase-0.ts",
     "verify:phase-0:no-e2e": "tsx scripts/verify-phase-0.ts --skip-e2e",
     "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
-    "verify:pipeline-flow": "tsx scripts/verify-pipeline-flow.ts",
+    "verify:cron-empty-handling": "tsx scripts/verify-cron-empty-handling.ts",
     "verify:phase-1": "tsx scripts/verify-phase-1.ts",
     "verify:phase-1:no-e2e": "tsx scripts/verify-phase-1.ts --skip-e2e",
-    "verify:phase-1:dev": "tsx scripts/verify-phase-1.ts --skip-e2e --skip-pipeline-flow",
+    "verify:phase-1:offline": "tsx scripts/verify-phase-1.ts --skip-e2e --skip-runtime",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "prepare": "husky"

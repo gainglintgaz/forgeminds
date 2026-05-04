@@ -27,6 +27,16 @@ export default async function BriefsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   const userId = user?.id;
 
+  // Page size from user_preferences (audit Blocker 6 — no hardcoded UX limits).
+  const { data: prefsRow } = userId
+    ? await supabase
+        .from("user_preferences")
+        .select("briefs_page_size")
+        .eq("user_id", userId)
+        .maybeSingle()
+    : { data: null };
+  const pageSize = prefsRow?.briefs_page_size ?? 30;
+
   const { data: briefs } = userId
     ? await supabase
         .from("briefs")
@@ -35,7 +45,7 @@ export default async function BriefsPage() {
         )
         .eq("user_id", userId)
         .order("brief_date", { ascending: false })
-        .limit(30)
+        .limit(pageSize)
     : { data: [] };
 
   const rows = (briefs ?? []) as BriefRow[];

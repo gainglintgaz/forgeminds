@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 import { DailyBriefEmail } from "@/lib/email/templates/daily-brief";
-import { resolveUserId, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
+import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 import type { ReactElement } from "react";
 
 export const maxDuration = 60;
@@ -100,6 +100,7 @@ export async function GET(request: Request) {
   const resend = new Resend(apiKey);
 
   const userId = resolveUserId(request);
+  const prefs = await loadPrefs(supabase, userId);
 
   const { data: run } = await supabase
     .from("pipeline_runs")
@@ -120,7 +121,7 @@ export async function GET(request: Request) {
       .not("summary_html", "is", null)
       .eq("is_delivered", false)
       .order("brief_date", { ascending: false })
-      .limit(20);
+      .limit(prefs.deliver_batch_size);
 
     if (briefErr) throw briefErr;
 

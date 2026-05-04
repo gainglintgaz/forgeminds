@@ -1,10 +1,11 @@
 /**
  * verify-phase-1.ts — Phase 1 (Pipeline End-to-End) verification orchestrator
  *
- * Runs every Phase 0 gate AND adds two Phase 1-specific gates:
- *   - verify:cron-routes — all 6 cron endpoints return 200 with valid CRON_SECRET
- *   - verify:pipeline-flow — at least one row exists today in raw_articles →
- *     scored_articles → briefs (proves the pipeline ran end-to-end on real data)
+ * Runs every Phase 0 gate AND adds Phase 1-specific gates that match the
+ * REVISED Phase 1 closure criteria from DECISIONS.md 2026-05-04:
+ *
+ *   "Pipeline infrastructure is ready and DORMANT until users tell it what
+ *    to do — and the pipeline genuinely does nothing until they do."
  *
  * Steps (each must exit 0 to proceed):
  *   1. tsc --noEmit              (catches what Vite/Turbopack skip)
@@ -13,10 +14,17 @@
  *   4. verify:columns            (no schema drift in Supabase queries)
  *   5. verify:rls                (every public table has RLS + policy)
  *   6. verify:honest-strings     (no fake/placeholder/mock data)
- *   7. verify:env-vars           (required vars wired)
- *   8. verify:cron-routes        (NEW: 6 cron endpoints respond 200)
- *   9. verify:pipeline-flow      (NEW: end-to-end pipeline data exists)
+ *   7. verify:env-vars           (Phase 1 required vars wired)
+ *   8. verify:cron-routes        (6 cron endpoints respond 200)
+ *   9. verify:cron-empty-handling (each route handles zero-source users
+ *                                  cleanly — pipeline_runs.status='completed',
+ *                                  items_processed=0, no errors)
  *  10. e2e (playwright)          (auth + dashboard + sources + briefs flows)
+ *
+ * NOT run anymore: verify:pipeline-flow (audit Blocker 3 — that gate
+ * asserted ≥1 row in raw_articles/scored_articles/briefs in last 24h,
+ * which contradicts the dormant-pipeline closure criteria. Replaced by
+ * verify:cron-empty-handling above.)
  *
  * On any failure: print which step failed, exit 1.
  * On full pass: print AUDIT GATE [phase-1] block, exit 0.
@@ -24,13 +32,12 @@
  * Usage:
  *   npx tsx scripts/verify-phase-1.ts
  *   npx tsx scripts/verify-phase-1.ts --skip-e2e   (during early Phase 1 dev)
- *   npx tsx scripts/verify-phase-1.ts --skip-pipeline-flow  (before first cron run)
  */
 
 import { spawnSync } from "child_process";
 
 const SKIP_E2E = process.argv.includes("--skip-e2e");
-const SKIP_PIPELINE_FLOW = process.argv.includes("--skip-pipeline-flow");
+const SKIP_RUNTIME = process.argv.includes("--skip-runtime"); // skip cron-routes + cron-empty-handling (require dev server)
 
 type Step = {
   name: string;
@@ -46,10 +53,12 @@ const STEPS: Step[] = [
   { name: "verify:rls", cmd: "npx", args: ["tsx", "scripts/verify-rls.ts"] },
   { name: "verify:honest-strings", cmd: "npx", args: ["tsx", "scripts/verify-honest-strings.ts"] },
   { name: "verify:env-vars", cmd: "npx", args: ["tsx", "scripts/verify-env-vars.ts"] },
-  { name: "verify:cron-routes", cmd: "npx", args: ["tsx", "scripts/verify-cron-routes.ts"] },
-  ...(SKIP_PIPELINE_FLOW
+  ...(SKIP_RUNTIME
     ? []
-    : [{ name: "verify:pipeline-flow", cmd: "npx", args: ["tsx", "scripts/verify-pipeline-flow.ts"] } as Step]),
+    : [
+        { name: "verify:cron-routes", cmd: "npx", args: ["tsx", "scripts/verify-cron-routes.ts"] } as Step,
+        { name: "verify:cron-empty-handling", cmd: "npx", args: ["tsx", "scripts/verify-cron-empty-handling.ts"] } as Step,
+      ]),
   ...(SKIP_E2E
     ? []
     : [{ name: "playwright e2e", cmd: "npx", args: ["playwright", "test"] } as Step]),

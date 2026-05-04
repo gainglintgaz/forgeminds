@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       .eq("user_id", userId)
       .gte("created_at", sinceIso)
       .order("published_at", { ascending: false })
-      .limit(100);
+      .limit(prefs.score_batch_size);
 
     if (!articles || articles.length === 0) {
       if (run?.id) {

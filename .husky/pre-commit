@@ -24,38 +24,61 @@ yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
 # ──────────────────────────────────────────────────────────────────────
 # 1. AUDIT GATE wording check + Phase audit requirement
 # ──────────────────────────────────────────────────────────────────────
-# When commit message uses "done|complete|finished|ship|deploy" AND mentions
-# a phase (phase 0, phase 1, phase 1.5, etc.), require:
-#   (a) AUDIT GATE block in body (covers verify:phase-N output)
-#   (b) PHASE AUDIT block in body (covers phase-auditor subagent findings)
-#   (c) the corresponding `.claude/checklists/phase-N-audit-*.md` file exists
-#       and is staged or already committed
-# This prevents declaring a phase "done" without running the §9 audit
-# (factory CLAUDE.md §9 + project-level audit checklist).
+# Trigger logic (tightened 2026-05-04 after self-trigger false positive):
+#
+# A. SUBJECT-LINE CHECK ONLY (first line of commit message). The body can
+#    say "complete" or "done" any number of times when describing fixes.
+#    Only the SUBJECT determines whether a phase is being declared done.
+#
+# B. Two flavors trigger the audit:
+#
+#    (1) Subject contains "phase X done|complete|finished|ship|deploy" as
+#        a phrase (with optional adjacent words). Examples:
+#          "feat: phase 1 complete"
+#          "feat(phase-1): ship to production"
+#          "Phase 1.5 done"
+#       → Triggers PHASE-SPECIFIC audit checks (PHASE AUDIT block + audit file).
+#
+#    (2) Subject contains a generic done|complete|finished|ship|deploy word
+#        WITHOUT a phase number. Example:
+#          "feat: ship Stripe webhook"
+#          "feat: dashboard fully functional and complete"
+#       → Triggers AUDIT GATE block requirement only (no phase audit file
+#         since no specific phase is being declared done).
+#
+# This way, "fix: audit Blocker 6 (Phase 0 marked complete elsewhere)" in
+# the body never triggers anything — the subject is "fix: audit Blocker 6"
+# and that doesn't match the trigger words.
 COMMIT_MSG_FILE="${1:-$(git rev-parse --git-dir)/COMMIT_EDITMSG}"
 
 if [ -f "$COMMIT_MSG_FILE" ]; then
   COMMIT_MSG="$(cat "$COMMIT_MSG_FILE")"
-  if echo "$COMMIT_MSG" | grep -Eqi '\b(done|complete|finished|ship|deploy)\b'; then
-    # AUDIT GATE block (verify:phase-N output)
+  COMMIT_SUBJECT="$(echo "$COMMIT_MSG" | head -1)"
+
+  # Phase-specific completion phrase in subject? Match "phase X (done|complete|...)"
+  # tolerating one or two words between, e.g. "phase 1 audit complete".
+  PHASE_REF="$(echo "$COMMIT_SUBJECT" \
+    | grep -oEi '\bphase[ -]?[0-9]+(\.[0-9]+)?\b[^.]*\b(done|complete|finished|ship|deploy)\b' \
+    | head -1 \
+    | grep -oE '[0-9]+(\.[0-9]+)?' \
+    | head -1 || true)"
+
+  # Generic completion word in subject (any case, not body)?
+  if echo "$COMMIT_SUBJECT" | grep -Eqi '\b(done|complete|finished|ship|deploy)\b'; then
     if ! echo "$COMMIT_MSG" | grep -q 'AUDIT GATE'; then
-      red "✗ Commit message uses 'done|complete|finished|ship|deploy' wording"
-      red "  but does not include an AUDIT GATE block in the body."
+      red "✗ Commit subject uses 'done|complete|finished|ship|deploy' wording"
+      red "  but body does not include an AUDIT GATE block."
       yellow "  Run 'npm run verify:phase-0' (or :phase-N) and paste the output block."
       yellow "  Or rephrase the commit ('wip', 'partial', 'fix in progress', etc)."
       exit 1
     fi
 
-    # If the commit refers to a specific phase (e.g. "phase 1 complete"),
-    # also require a PHASE AUDIT block (from phase-auditor subagent) AND
-    # an audit file in .claude/checklists/.
-    PHASE_REF="$(echo "$COMMIT_MSG" | grep -oEi 'phase[ -]([0-9]+(\.[0-9]+)?)' | head -1 | grep -oE '[0-9]+(\.[0-9]+)?' || true)"
     if [ -n "$PHASE_REF" ]; then
-      # Replace dot with dash for filename (phase 1.5 → phase-1-5)
+      # Phase-specific completion → require PHASE AUDIT block + audit file
       PHASE_SLUG="$(echo "$PHASE_REF" | tr '.' '-')"
 
       if ! echo "$COMMIT_MSG" | grep -q 'PHASE AUDIT'; then
-        red "✗ Commit declares phase $PHASE_REF complete but no PHASE AUDIT block in body."
+        red "✗ Commit subject declares phase $PHASE_REF complete but no PHASE AUDIT block in body."
         yellow "  Run the phase-auditor subagent on phase $PHASE_REF, then paste its sign-off block."
         yellow "  See .claude/checklists/phase-audit-template.md and .claude/agents/phase-auditor.md."
         exit 1
