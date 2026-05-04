@@ -344,9 +344,11 @@ The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpaca
 
 ---
 
-## 2026-05-04 — Supabase advisor cleanup: 11 fixed, 4 by-design, 1 toggle pending
+## 2026-05-04 — Supabase advisor cleanup: 11 fixed, 5 deferred or by-design
 
-**What happened:** Phase 1 audit's "Supabase advisor scan" manual step returned 16 WARN-level findings (0 errors/critical). After migration `20260504000001_security_advisor_fixes.sql` ran, **5 warnings remained** — 3 are extensions explicitly deferred, 1 is an intentional design choice (`track_event` callable by `authenticated` is the whole point), 1 is a Dashboard toggle (Leaked Password Protection) Victor enables manually.
+**What happened:** Phase 1 audit's "Supabase advisor scan" manual step returned 16 WARN-level findings (0 errors/critical). After migration `20260504000001_security_advisor_fixes.sql` ran, **5 warnings remained** — 3 are extensions explicitly deferred, 1 is an intentional design choice (`track_event` callable by `authenticated` is the whole point), 1 is a Supabase **Pro-tier-only** feature (Leaked Password Protection) blocked on the project's current Free plan.
+
+**Free vs Pro plan:** Leaked Password Protection (HaveIBeenPwned check) is a Supabase paid feature, not free-tier. Victor remains on Free for now; project will migrate to Pro before public launch (Phase 10 productization). The advisor warning persists in the meantime — known + tracked + accepted.
 
 **Corrected math** (initial commit message claimed "13 of 16 cleared" — actually 11):
 - 16 total findings → 4 cleared by `set search_path` on SECURITY DEFINER fns (Group A)

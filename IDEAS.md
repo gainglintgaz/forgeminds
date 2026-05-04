@@ -223,3 +223,12 @@ Connect to Alpaca/Robinhood, execute trades based on Trust Escalation autonomy.
 ## 🟢 [2026-05-04] Agent-suggested action templates from source content
 **Why interesting:** When a user adds a source about "biotech earnings," the agent can pre-suggest action templates ("track quarterly earnings → draft summary content"). Bridges Phase 1.5 source picking to Phase 3 action templates.
 **Status:** ADOPT in Phase 3 design. Action templates should be discoverable via the same conversational interface used for sources.
+
+## 🟡 [2026-05-04] Migrate Supabase project to Pro tier (before Phase 10 launch)
+**Why required:** Several security + reliability features are Pro-only:
+- **Leaked Password Protection** (HaveIBeenPwned check on signup/password change) — already failing the advisor scan today
+- **Point-in-Time Recovery** (7-day rollback) — required by factory CLAUDE.md §5.1
+- **Increased rate limits** + larger DB (1GB Free → 8GB Pro)
+- **Daily off-platform pg_dump** is independent but harder to justify cost-wise on Free tier
+**Cost:** $25/mo per project (compute scales separately).
+**Status:** DEFER until just before Phase 10 multi-user launch (when first paying customers arrive). Tracked here so we don't forget it. Phase 10's verify checklist must include "Pro plan active" as a precondition.
