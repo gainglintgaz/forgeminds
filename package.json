@@ -17,6 +17,7 @@
     "verify:phase-0:no-e2e": "tsx scripts/verify-phase-0.ts --skip-e2e",
     "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
     "verify:cron-empty-handling": "tsx scripts/verify-cron-empty-handling.ts",
+    "print:bootstrap-sql": "tsx scripts/print-bootstrap-sql.ts",
     "verify:phase-1": "tsx scripts/verify-phase-1.ts",
     "verify:phase-1:no-e2e": "tsx scripts/verify-phase-1.ts --skip-e2e",
     "verify:phase-1:offline": "tsx scripts/verify-phase-1.ts --skip-e2e --skip-runtime",

@@ -344,9 +344,21 @@ The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpaca
 
 ---
 
-## 2026-05-04 — Supabase advisor cleanup: 13 fixed, 4 deferred
+## 2026-05-04 — Supabase advisor cleanup: 11 fixed, 4 by-design, 1 toggle pending
 
-**What happened:** Phase 1 audit's "Supabase advisor scan" manual step ran and returned 16 WARN-level findings (0 errors/critical). 13 fixed in migration `20260504000001_security_advisor_fixes.sql`. Three deferred (with rationale below) and one is a Dashboard toggle (Victor enables manually).
+**What happened:** Phase 1 audit's "Supabase advisor scan" manual step returned 16 WARN-level findings (0 errors/critical). After migration `20260504000001_security_advisor_fixes.sql` ran, **5 warnings remained** — 3 are extensions explicitly deferred, 1 is an intentional design choice (`track_event` callable by `authenticated` is the whole point), 1 is a Dashboard toggle (Leaked Password Protection) Victor enables manually.
+
+**Corrected math** (initial commit message claimed "13 of 16 cleared" — actually 11):
+- 16 total findings → 4 cleared by `set search_path` on SECURITY DEFINER fns (Group A)
+- 4 cleared by REVOKE from `anon` on 4 SECURITY DEFINER fns (Group C, anon side)
+- 3 cleared by REVOKE from `authenticated` on `forgeminds_columns`, `forgeminds_rls_state`, `handle_new_user` (Group D, partial — `track_event` kept for authenticated by design)
+- = **11 cleared by code**, 1 will clear after Leaked Password Protection toggle, **4 remain ACCEPTED** (3 extensions deferred + 1 `track_event` intentional)
+
+**The 4 accepted/expected warnings (acknowledged, not fixed):**
+1. `extension_in_public: pg_trgm` — deferred, see "Deferred (3 findings)" below
+2. `extension_in_public: vector` — deferred, see below
+3. `extension_in_public: pg_net` — deferred, see below
+4. `authenticated_security_definer_function_executable: track_event` — INTENTIONAL. `track_event` is the client-callable analytics surface; SECURITY DEFINER lets it write to `behavioral_events` even when RLS would block direct INSERT. Authenticated users SHOULD be able to call it. The advisor doesn't know we made this design choice on purpose. The warning stays as a known by-design entry.
 
 **Fixed in this migration (13 findings):**
 - Group A (4): `function_search_path_mutable` on `prune_old_behavioral_events`, `refresh_brain_counts`, `set_updated_at`, `prune_data_source_cache` — pinned search_path to `public, pg_temp`. Closes search_path injection vector for SECURITY DEFINER fns.
