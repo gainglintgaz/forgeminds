@@ -341,3 +341,30 @@ The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpaca
 - Audit file: `.claude/checklists/phase-1-audit-2026-05-04.md` Blocker 5
 - Plan: `sparkling-waddling-pinwheel.md` Phase 1.5 §5 + §C
 - Tracking: ARCHITECTURE_NOTES.md "Per-User Source Iteration Pattern"
+
+---
+
+## 2026-05-04 — Supabase advisor cleanup: 13 fixed, 4 deferred
+
+**What happened:** Phase 1 audit's "Supabase advisor scan" manual step ran and returned 16 WARN-level findings (0 errors/critical). 13 fixed in migration `20260504000001_security_advisor_fixes.sql`. Three deferred (with rationale below) and one is a Dashboard toggle (Victor enables manually).
+
+**Fixed in this migration (13 findings):**
+- Group A (4): `function_search_path_mutable` on `prune_old_behavioral_events`, `refresh_brain_counts`, `set_updated_at`, `prune_data_source_cache` — pinned search_path to `public, pg_temp`. Closes search_path injection vector for SECURITY DEFINER fns.
+- Groups C+D (8 = 4 functions × anon + authenticated): `forgeminds_columns`, `forgeminds_rls_state`, `handle_new_user` revoked from both roles (granted only to service_role / not exposed). `track_event` revoked from anon, kept for authenticated (intentional client-side analytics surface). Closes "public can execute SECURITY DEFINER" exposure.
+- Verification: re-run Supabase Advisor → Security tab; the 13 entries above should be gone.
+
+**Deferred (3 findings) — `extension_in_public`:**
+- `pg_trgm`, `vector`, `pg_net` are installed in the `public` schema. Supabase recommends moving extensions to a dedicated `extensions` schema for tidiness. **Why deferred:**
+  1. These extensions came from migration 1 (`20260413000000_initial_schema.sql`) and from supabase auto-install. Moving them requires a migration that does `ALTER EXTENSION <name> SET SCHEMA extensions` AND auditing every code reference (column types like `vector(1536)`, function calls like `pg_net.http_post`, indexes using `gin_trgm_ops`).
+  2. Risk of breaking the dispatcher migration (`pg_net.http_post` is called inside `private.invoke_forgeminds_cron`).
+  3. Pure cosmetic security finding — not a real attack vector when extensions are properly granted.
+- **Target:** Phase 2 cleanup migration. Document the move + run `verify:phase-2` to confirm no regression.
+
+**Manual (1 finding) — `auth_leaked_password_protection`:**
+- Supabase Auth setting that checks new passwords against HaveIBeenPwned.org. Not a SQL fix — a Dashboard toggle.
+- **Action for Victor:** open Authentication → Providers → Email (or `Authentication → Settings`) → enable "Leaked Password Protection". One-click. After enabling, re-run advisor to confirm warning clears.
+
+**Reference:**
+- Migration: `supabase/migrations/20260504000001_security_advisor_fixes.sql`
+- Supabase docs: https://supabase.com/docs/guides/database/database-linter
+- Advisor scan output: pasted in conversation 2026-05-04 (16 warnings, 0 errors)
