@@ -12,18 +12,8 @@ import type { RawArticle, FetchResult } from "@/lib/types/articles";
 
 export const maxDuration = 120;
 
-const EMPTY_FETCH_RESULT: FetchResult = {
-  source: "n/a",
-  success: true,
-  items: [],
-};
-
-const EMPTY_RSS_RESULT = {
-  articles: [] as RawArticle[],
-  successCount: 0,
-  errorCount: 0,
-  errors: [] as string[],
-};
+// (Empty-result helpers removed in 12b566f refactor — no longer needed because
+// fetchers are only invoked when sources of that type exist for the user.)
 
 export async function GET(request: Request) {
   // Auth check
@@ -77,7 +67,8 @@ export async function GET(request: Request) {
       .map((s) => s.url)
       .filter((u): u is string => !!u);
 
-    const fetcherTasks: Array<Promise<{ source: string; result: FetchResult | typeof EMPTY_RSS_RESULT }>> = [];
+    type RssResultShape = { articles: RawArticle[]; successCount: number; errorCount: number; errors: string[] };
+    const fetcherTasks: Array<Promise<{ source: string; result: FetchResult | RssResultShape }>> = [];
 
     if (rssUrls.length > 0) {
       fetcherTasks.push(fetchAllRSSFeeds(rssUrls).then((r) => ({ source: "rss", result: r })));
@@ -215,6 +206,3 @@ export async function GET(request: Request) {
   }
 }
 
-// EMPTY_FETCH_RESULT exists for type-checking parity; not used in current
-// flow because we omit the fetcher entirely when source-type is absent.
-void EMPTY_FETCH_RESULT;
