@@ -453,6 +453,21 @@ async function loadLiveSchema(): Promise<SchemaMap> {
 // ── main ──────────────────────────────────────────────────────────────
 const ALWAYS_OK = new Set(["*", "count", "exact", "head"]);
 
+/**
+ * Tables defined in committed migrations but not yet applied to the live
+ * dev DB. Code referencing these is allowed — verify-columns warns
+ * (visible in CI logs) but doesn't fail. Once the migration is applied,
+ * the table appears in `forgeminds_columns()` output and the entry should
+ * be removed from this list.
+ *
+ * If you add a table here, also add it to ARCHITECTURE_NOTES.md under
+ * "Pending migrations" so the unblocking step is documented.
+ */
+const PENDING_MIGRATION_TABLES = new Set<string>([
+  "source_catalog",      // 20260510000000_source_catalog.sql (Phase 1.5)
+  "source_suggestions",  // 20260510000001_source_suggestions.sql (Phase 1.5)
+]);
+
 async function main() {
   console.log("🔍 verify-columns: scanning src/ for Supabase query call sites…");
   const files = walk(SRC_ROOT);
@@ -466,10 +481,17 @@ async function main() {
 
   let mismatches = 0;
   const reported: string[] = [];
+  const pendingWarnings: string[] = [];
 
   for (const s of sites) {
     const cols = schema.get(s.table);
     if (!cols) {
+      if (PENDING_MIGRATION_TABLES.has(s.table)) {
+        pendingWarnings.push(
+          `   ⚠ ${relative(process.cwd(), s.file)}:${s.line}  table "${s.table}" not in live schema (pending migration — allowed)`
+        );
+        continue;
+      }
       mismatches++;
       reported.push(
         `   ✗ ${relative(process.cwd(), s.file)}:${s.line}  table "${s.table}" not found in schema`
@@ -485,6 +507,13 @@ async function main() {
         );
       }
     }
+  }
+
+  if (pendingWarnings.length > 0) {
+    console.log(
+      `   ${pendingWarnings.length} reference(s) to pending-migration tables — allowed:`
+    );
+    for (const w of pendingWarnings) console.log(w);
   }
 
   if (mismatches === 0) {
