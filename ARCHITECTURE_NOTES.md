@@ -376,9 +376,11 @@ const results = await Promise.all(fetcherCalls);
 
 ---
 
-## Source Catalog Architecture (Phase 1.5 — to be built)
+## Source Catalog Architecture (Phase 1.5 — skeleton built 2026-05-05)
 
 For the AI-assisted source discovery agent, ForgeMinds maintains a curated catalog of ~300-500 sources organized by category/subcategory/paywall/quality. Catalog is **public read** (every user sees the same options), **service_role write** (only the source-catalog-curator subagent updates it).
+
+**Status (2026-05-05):** schema migrations + RAG RPC + conversational wizard + source-validator runtime + /sources page redesign all committed. Migrations are file-only (not yet applied to dev). Catalog seeding deferred to dedicated Phase 1.5 sessions where Victor reviews curator subagent output per (category, subcategory) batch.
 
 ```
 source_catalog
@@ -407,9 +409,57 @@ source_catalog
 - Intent extraction: structured-output prompts → topics, depth_pref, cadence_pref, paywall_pref, geography
 - Source selection: vector similarity (catalog embeddings vs intent embedding) + filter by paywall_tier ≤ user-comfort + filter by paywall_tier ≤ tier-cap
 
-**Subagents (Claude Code):**
-- `.claude/agents/source-catalog-curator.md` — researches + proposes new catalog entries with verified URLs, outputs SQL INSERTs
-- `.claude/agents/source-validator.md` — validates user-submitted URLs at runtime (RSS/Atom parse, sample item extract, safety verdict)
+**Subagents (Claude Code, dev-time):**
+- `.claude/agents/source-catalog-curator.md` — researches + proposes new catalog entries with verified URLs, outputs SQL INSERTs to `supabase/seeds/source_catalog/<category>/<subcategory>.sql`
+- `.claude/agents/source-validator.md` — Haiku-backed batch validator for catalog entries during seeding (one-off URL check)
+
+**Runtime equivalents (production code):**
+- `src/lib/onboarding/source-validator.ts` — TypeScript reimplementation of the source-validator subagent. Used by `/api/onboarding/validate-source` for the "Add custom URL" power-user fallback. Same JSON contract as the subagent so a future swap-back is drop-in.
+- `src/lib/onboarding/intent-extractor.ts` — Claude Haiku JSON-mode extraction of UserIntent shape (topics, depth, cadence, paywall, geography) from user free-form text.
+- `src/lib/onboarding/catalog-rag.ts` — `retrieveCandidates(intent, topK)` calls `match_source_catalog` RPC. Filters by paywall_pref + geography BEFORE vector ANN. Throws RagSearchError if RPC missing (caller falls back).
+- `src/lib/onboarding/agent.ts` — `proposeSources(intent)`. Stage 1 RAG → Stage 2 Claude Sonnet picks 8-12 + drafts per-source `reason`. Defends against LLM hallucinating catalog ids by dropping unknown.
+
+**RAG RPC (`public.match_source_catalog`):**
+SECURITY DEFINER, pinned `search_path = public, pg_temp`. Cosine similarity (`embedding <=> query_embedding`) combined 70/30 with `quality_score` for final ranking. EXECUTE granted to authenticated + service_role; revoked from anon. Defined in `supabase/seeds/source_catalog_rag_rpc.sql` (apply at Phase 1.5 close).
+
+**Onboarding API contract:**
+
+```
+POST /api/onboarding/chat
+  body: { description: string }  OR  { intent: UserIntent }
+  → 200 { intent, proposals: SourceProposal[], costEstimateUsd, modelsUsed }
+  → 401 (anon)
+  → 422 (couldn't extract clear topics)
+  → 503 (catalog empty / RPC missing)
+
+POST /api/onboarding/finalize
+  body: { acceptedCatalogIds: string[], intent?: UserIntent }
+  → 200 { sourcesCreated, sourcesAlreadyExisted, preferencesUpdated, sourceIds[] }
+  Idempotent: re-submission returns same sourceIds count, no duplicates.
+
+POST /api/onboarding/validate-source
+  body: { url: string }
+  → 200 ValidationResult (valid: bool, type, sampleTitles[], lastUpdate, concerns[])
+  → 401 (anon)
+```
+
+**Cost guardrails (per onboarding run):**
+- Intent extract:    Haiku ~$0.001
+- Catalog RAG:       OpenAI text-embedding-3-small one query ~$0.0002
+- Proposal pick:     Sonnet ~$0.04 (catalog cached at 10% of base input price after first turn)
+- Total budget cap:  $0.10 (`ONBOARDING_COST_CAP_USD` in `src/lib/onboarding/types.ts`)
+
+**Schema additions (file-only migrations 20260510*):**
+- `paywall_tier` enum: free / freemium / paid / byos
+- `update_cadence` enum: realtime / hourly / daily / weekly / monthly
+- `suggestion_source` enum: onboarding_agent / sidebar_chat / weekly_advisor_cron / health_check_cron / manual
+- `suggestion_status` enum: pending / accepted / dismissed / expired
+- `source_catalog` table (RLS: public read, service_role write)
+- `source_suggestions` table (RLS: own data; INSERT service_role only via API routes)
+- `match_source_catalog(query_embedding, match_count, allowed_tiers, allowed_geographies)` RPC
+
+**Pending-migration tables in verify-columns:**
+`scripts/verify-columns.ts` has a `PENDING_MIGRATION_TABLES` allowlist that lets code reference `source_catalog` and `source_suggestions` before the migrations are applied to dev. Once applied, the entries should be removed from the allowlist (and `npm run verify:phase-1-5:offline` becomes redundant).
 
 ---
 

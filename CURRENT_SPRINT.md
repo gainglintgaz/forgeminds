@@ -1,9 +1,41 @@
 # ForgeMinds — Current Sprint
 
-## Phase 1: Pipeline Infrastructure (CURRENT — pending close)
-**Status:** Audit complete (7 blockers identified, fixes in flight) — 2026-05-04
+## Phase 1.5: AI-Assisted Source Discovery (CURRENT — skeleton built, awaits Phase 1 close)
+**Status:** Infrastructure complete; catalog seed + dev migration apply pending
+**Started:** 2026-05-05 (overnight autonomous build, parallel with Phase 1 close)
+**Last update:** 2026-05-05
+
+**What "skeleton built" means:** Every Phase 1.5 file/route/component exists, type-checks clean, lints clean, and passes the pre-commit gates. Catalog seeding via the `source-catalog-curator` subagent + dev DB migration apply happen in dedicated Phase 1.5 sessions. Those are the only remaining gates between skeleton and ship.
+
+### Skeleton inventory (all committed; see overnight commits 09a2bd2 → 938ceb6)
+
+| Block | Deliverable | Files | Commit |
+|---|---|---|---|
+| A | source_catalog + source_suggestions migrations | 2 SQL | 09a2bd2 |
+| B | Catalog seed dir + curator dispatch README | 1 MD | 3817625 |
+| C | Onboarding wizard (3 pages + layout + 3 client components + 2 API routes + 4 lib files) | 14 ts/tsx | 818b465 |
+| D | Claude/OpenAI/Perplexity providers + router wiring | 4 ts | e2f8991 |
+| E | Source-validator runtime + onboarding e2e stubs | 3 ts | be44173 |
+| F | verify-phase-1-5 + verify-source-catalog + checklist + npm scripts | 4 files | 8c64d70 |
+| G | /sources page redesign (CatalogBrowser + SuggestionsPanel + SourceHealth) | 4 tsx | 938ceb6 |
+
+### Remaining for Phase 1.5 close
+
+1. ⏳ Apply migrations 20260510000000_source_catalog.sql + 20260510000001_source_suggestions.sql to dev project
+2. ⏳ Apply seeds/source_catalog_rag_rpc.sql (`match_source_catalog` RPC)
+3. ⏳ Run source-catalog-curator subagent for ≥10 (category, subcategory) pairs to seed ≥200 sources (file-by-file commits per README in supabase/seeds/source_catalog/)
+4. ⏳ Run embed-source-catalog backfill script (Phase 1.5 close task — script not yet written)
+5. ⏳ Add ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY to .env.local + Vercel
+6. ⏳ Smoke test: real onboarding run → proposals returned → /onboarding/finalize → sources written
+7. ⏳ Run `npm run verify:phase-1-5` (with dev server) → all gates green
+8. ⏳ `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
+
+---
+
+## Phase 1: Pipeline Infrastructure (PRIOR — pending close)
+**Status:** Audit complete (7 blockers identified, all fixes landed) — 2026-05-04
 **Started:** 2026-04-30 (after Phase 0 closed)
-**Last update:** 2026-05-04
+**Last update:** 2026-05-05 (Phase 1.5 build did not regress Phase 1 gates)
 
 **Revised closure criteria (DECISIONS.md 2026-05-04):** "Pipeline infrastructure is ready and dormant until users tell it what to do — and the pipeline genuinely does nothing until they do." Articles only flow after Phase 1.5 (AI-Assisted Source Discovery) ships.
 

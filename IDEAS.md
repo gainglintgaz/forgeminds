@@ -232,3 +232,40 @@ Connect to Alpaca/Robinhood, execute trades based on Trust Escalation autonomy.
 - **Daily off-platform pg_dump** is independent but harder to justify cost-wise on Free tier
 **Cost:** $25/mo per project (compute scales separately).
 **Status:** DEFER until just before Phase 10 multi-user launch (when first paying customers arrive). Tracked here so we don't forget it. Phase 10's verify checklist must include "Pro plan active" as a precondition.
+
+## 🆕 [2026-05-05] Phase 1.5 followups surfaced during skeleton build
+
+A handful of items surfaced while building the conversational onboarding wizard. None block Phase 1.5 close — capture for later sessions.
+
+### Streaming chat in onboarding
+The current `/api/onboarding/chat` returns the full proposal set in one round-trip. Vercel AI SDK's streaming `Response` would let the user see proposals appearing one-by-one — better UX, ~zero infra cost. **Adopt** in Phase 1.5+1 or Phase 2 polish.
+
+### Multi-turn refine on /onboarding/refine
+After proposals render, "show me more like Bloomberg" or "swap finance for hyperlocal" should re-call the agent with the prior intent + feedback merged. Today the page only renders pending proposals without a follow-up loop. **Adopt** when streaming lands; the two are natural pairs.
+
+### sources.catalog_id denormalized FK
+`/sources` page wants to show "already added" badges in CatalogBrowser. Today we'd need a URL match between catalog rows and sources rows. Adding `sources.catalog_id` (nullable FK to source_catalog) lets us query the relationship directly + supports analytics ("which catalog entries are most-added per category"). **Adopt** in Phase 1.5 close.
+
+### embed-source-catalog backfill script
+`scripts/embed-source-catalog.ts` doesn't exist yet — it's referenced in checklist + verify-source-catalog. Needs to read all rows where `embedding is null`, batch through `embedBatch()` from openai provider (max 2048 inputs/call), upsert `embedding` column. **Required** for Phase 1.5 close (without it, RAG returns empty results).
+
+### Anthropic prompt cache cost analytics
+The onboarding agent uses `cacheableSystemPrompt` for the catalog (~50K tokens). Cost calc handles cache_read + cache_creation buckets but we don't yet log cache hit rate per session. Worth adding once we have ~10 real onboarding runs to tune the cache budget. **Track post-Phase-1.5 close.**
+
+### Source-advisor weekly cron
+`forgeminds_source_advisor_weekly` is in the Phase 1.5 plan but not yet scheduled (would need migration `20260510000002_source_advisor_cron.sql`). Logic: per user, every 7 days, look at save/dismiss patterns, ask LLM for refinement suggestions, write to source_suggestions. **Adopt** after live onboarding traffic exists to feed the model.
+
+### Dead-feed health monitoring cron
+`forgeminds_source_health_daily` similarly planned but unscheduled. Logic: per user, every day, check `last_fetched_at + error_count` for active sources, suggest replacement via source_suggestions when a feed is stale or failing. SourceHealth component is wired to render the surfaced concerns. **Adopt** alongside source-advisor.
+
+### Catalog visible in marketing landing
+Plan §1.5 followup: render a sample of high-quality catalog entries on the / landing page as social proof of breadth ("we have ~200 sources spanning 10 categories"). Public read on source_catalog already supports this. **Adopt** in Phase 10 marketing prep.
+
+### Power user "config-only" mode
+For users who genuinely don't want the agent (data-engineer types who want to script their own source list), expose a settings flag `skip_onboarding_agent: true` that routes new users to a paginated catalog browser + bulk-add UI instead of /onboarding/intake. **Adopt** when first user explicitly asks for it; not before.
+
+### LinkedIn-profile-driven source suggestions
+If user connects LinkedIn (Phase 9 scheduler+OAuth scope), agent could pre-extract an initial intent from their headline + most-viewed-articles + connections. Skips the intake textarea entirely. **Adopt** when LinkedIn OAuth ships.
+
+### Multi-language source catalog
+Catalog is English-only at Phase 1.5 close. `geography` field includes language codes; expanding catalog to non-English sources is future work. **Adopt** post-Phase-10 (international expansion).

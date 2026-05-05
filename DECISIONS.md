@@ -382,3 +382,26 @@ The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpaca
 - Migration: `supabase/migrations/20260504000001_security_advisor_fixes.sql`
 - Supabase docs: https://supabase.com/docs/guides/database/database-linter
 - Advisor scan output: pasted in conversation 2026-05-04 (16 warnings, 0 errors)
+
+
+---
+
+## 2026-05-05 — Phase 1.5 skeleton built overnight (autonomous pass)
+
+**Decision:** Build every Phase 1.5 file/route/component skeleton in a single overnight pass without per-block approval. Apply NO DB migrations and run NO catalog seeding during the pass. Catalog seeding happens in dedicated Phase 1.5 sessions where Victor can review and approve each subagent batch.
+
+**Why:** The infrastructure (schema migrations, conversational wizard, AI providers, source-validator, verify gates, /sources redesign) is straightforward to build mechanically. The catalog seed is research-heavy and budget-sensitive — every WebFetch verification costs time and dispatching curator subagents to mass-seed in one autonomous pass risks silent quality drift. Better to land the rails overnight and let the curator runs be deliberate, reviewed, per-subcategory.
+
+**What did NOT change:**
+- No DB applies; migrations stay file-only
+- No git push to remote
+- No Vercel deploys
+- No paid API calls; only the local build/lint/type/verify gates run
+- No .env.local edits
+- No package installs beyond package.json scripts
+- Phase 1 close commit deferred to Victor
+
+**Result (commits 09a2bd2 → 938ceb6):** ~10 commits, all `wip(phase-1-5):` or `feat(phase-1-5):` prefixed, every commit through pre-commit gates (tsc + lint + verify:columns + secret grep + ESLint).
+
+**Next session:** Apply the two Phase 1.5 migrations + the RAG RPC seed, dispatch the curator subagent for the first 3-5 categories, run a real onboarding round-trip with my own description, iterate on quality from there.
+
