@@ -170,6 +170,65 @@ grep -rE "\.from\(\"pipeline_runs\"\)\.insert" src/app/api/cron/ | wc -l
 # expect 1 per cron route minimum
 ```
 
+**L. Phase-1.5-specific checks (run only when auditing phase-1-5 — skip for phase-0/1)**
+```bash
+# 1. source_catalog migrations applied
+npm run verify:db
+# expect 20260510000000 + 20260510000001 in `migrated:` list
+
+# 2. Catalog seed thresholds
+npm run verify:source-catalog
+# expect ≥200 active rows, ≥10 categories, median quality ≥0.65
+
+# 3. PENDING_MIGRATION_TABLES allowlist should be empty post-apply
+grep -A 5 "PENDING_MIGRATION_TABLES = new Set" scripts/verify-columns.ts
+# expect empty Set([]); if entries remain, dev DB is behind committed migrations
+
+# 4. AI provider keys present in .env.local
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY PERPLEXITY_API_KEY; do
+  grep -E "^$k=" .env.local >/dev/null 2>&1 \
+    && echo "✓ $k set" \
+    || echo "✗ $k MISSING in .env.local"
+done
+
+# 5. Onboarding API routes auth-gate (auth check should be first thing)
+for route in src/app/api/onboarding/*/route.ts; do
+  echo "=== $route ==="
+  grep -nE "auth\.getUser\(\)" "$route" | head -3
+  # expect: getUser() called within first ~20 lines of POST handler
+done
+
+# 6. Source-validator NEVER returns valid:true with empty sampleTitles
+grep -nE "valid:\s*true" src/lib/onboarding/source-validator.ts
+# every match should be in a path that ALSO has sampleTitles.length > 0 guard
+
+# 7. Embeddings shouldn't go through routeAIRequest (vector ≠ text)
+grep -rE "task:\s*['\"]embed['\"]" src/lib/onboarding/ src/app/api/onboarding/
+# expect 0 matches — embeddings call embedText() directly
+
+# 8. Anthropic prompt caching wired for catalog (cacheableSystemPrompt)
+grep -rE "cacheableSystemPrompt" src/lib/onboarding/
+# expect ≥1 match (in agent.ts when full RAG is enabled)
+# WARN if 0: catalog will be paid for at 100% input price every turn
+
+# 9. No accidental "Bring Your Own Subscription" auto-add
+grep -rE "paywall_tier:\s*['\"]paid['\"]" src/app/api/onboarding/
+# any match must be in a comment or explicit user-confirmed path
+
+# 10. Cost cap honored — every onboarding response should report costEstimateUsd
+grep -rE "costEstimateUsd" src/app/api/onboarding/
+# expect ≥2 (chat returns it, finalize doesn't need to)
+
+# 11. Source catalog RPC has SECURITY DEFINER + pinned search_path
+grep -nE "match_source_catalog" supabase/seeds/source_catalog_rag_rpc.sql
+grep -nE "set search_path" supabase/seeds/source_catalog_rag_rpc.sql
+# both should match
+
+# 12. e2e onboarding spec exists
+ls e2e/onboarding.spec.ts
+# expect file present
+```
+
 ### 3. Run human-required checks (mark as "manual" with instructions)
 
 Some rows can't be auto-validated. Mark them with `⚠️ MANUAL` in the report and provide explicit instructions for the human:

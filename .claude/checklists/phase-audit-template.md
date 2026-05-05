@@ -148,7 +148,6 @@
 For each phase, append rows specific to what shipped this phase. Examples:
 
 - **Phase 1:** "Project bootstrap SQL applied", "Cron dispatcher tested manually", "Empty-source handling verified per route"
-- **Phase 1.5:** "Source catalog has ≥200 entries spanning ≥10 categories", "Conversational agent cost ≤$0.10/onboarding-run", "Source-validator subagent rejects all known-hallucinated test URLs"
 - **Phase 2:** "Two test users see different per-user-scored feeds", "Onboarding flow writes profiles + user_preferences correctly"
 - (etc.)
 
@@ -157,6 +156,29 @@ For each phase, append rows specific to what shipped this phase. Examples:
 | _Phase-specific 1_ | ⬜ | |
 | _Phase-specific 2_ | ⬜ | |
 | _Phase-specific 3_ | ⬜ | |
+
+### Phase 1.5 specific (use for `phase-1-5-audit-<date>.md`)
+
+| Check | Pass? | Evidence |
+|---|---|---|
+| Migrations 20260510000000 + 20260510000001 applied to dev DB | ⬜ | `npm run verify:db` listing |
+| `supabase/seeds/source_catalog_rag_rpc.sql` applied; RPC has `set search_path = public, pg_temp` | ⬜ | `select proname, proconfig from pg_proc where proname='match_source_catalog'` |
+| EXECUTE on `match_source_catalog` revoked from anon; granted to authenticated + service_role | ⬜ | `has_function_privilege('anon', ...)` returns false |
+| `source_catalog` ≥200 active rows, ≥10 distinct categories, median quality_score ≥0.65 | ⬜ | `npm run verify:source-catalog` |
+| `source_catalog.embedding` non-null on ≥95% of rows | ⬜ | verify:source-catalog gate 5 |
+| Catalog paywall mix ≥50% free or freemium (not 100% paid) | ⬜ | verify:source-catalog gate 4 |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY` set in `.env.local` AND Vercel | ⬜ | grep `.env.local` + Vercel dashboard |
+| `PENDING_MIGRATION_TABLES` allowlist in `scripts/verify-columns.ts` is empty (post-apply) | ⬜ | grep output |
+| All 4 onboarding API routes (`/api/onboarding/{chat,finalize,validate-source}`) auth-gate (return 401 anon) | ⬜ | playwright `e2e/onboarding.spec.ts` |
+| `/onboarding/intake` redirects to `/login` when unauthenticated | ⬜ | playwright spec |
+| Source-validator returns `valid: false` for: invalid URL, 404, HTML page, empty-feed XML, JSON without items | ⬜ | manual smoke or unit test |
+| Single onboarding round-trip: real description → ≥5 proposals returned → finalize creates `sources` rows | ⬜ | manual smoke run, log `costEstimateUsd` |
+| `costEstimateUsd` per onboarding run ≤ $0.10 across 5 simulated runs | ⬜ | log lines from `/api/onboarding/chat` responses |
+| Anthropic prompt cache hit on second turn of same conversation (cache_read_input_tokens > 0) | ⬜ | console log of LLM response usage block |
+| Catalog visible in `/sources` CatalogBrowser; "Add" button creates `sources` row idempotently | ⬜ | manual click-through, then SELECT |
+| SuggestionsPanel auto-hides when no pending suggestions (no empty cruft) | ⬜ | render after dismiss-all |
+| SourceHealth flags ≥1 stale source after manually setting `last_fetched_at = now() - 49h` | ⬜ | inspect-then-revert in dev DB |
+| New advisor scan post-apply has 0 new findings (4 carryover from Phase 1 still acceptable) | ⬜ | screenshot of Supabase Advisor → Security tab |
 
 ## Findings summary
 
