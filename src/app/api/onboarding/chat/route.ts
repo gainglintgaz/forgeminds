@@ -24,7 +24,11 @@ import {
   IntentExtractionError,
 } from "@/lib/onboarding/intent-extractor";
 import { proposeSources, AgentError } from "@/lib/onboarding/agent";
-import type { UserIntent, SourceProposal } from "@/lib/onboarding/types";
+import {
+  type UserIntent,
+  type SourceProposal,
+  ONBOARDING_COST_CAP_USD,
+} from "@/lib/onboarding/types";
 
 interface ChatRequestBody {
   /** User's free-form description of what they want their pipeline to cover. */
@@ -45,6 +49,10 @@ interface ChatResponseBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Captured first so the structured cost-audit log can report end-to-
+  // end duration including auth + DB round-trips, not just LLM calls.
+  const requestStartedAt = Date.now();
+
   // Auth gate. Onboarding requires signed-in user — anon proposals
   // would have nowhere to land (source_suggestions.user_id is NOT NULL).
   const supabase = await createClient();
@@ -155,6 +163,38 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error("[/api/onboarding/chat] persist threw:", e);
     }
+  }
+
+  // Stage 4: structured cost-audit log. Per AI_FIRST_AUDIT.md §B Q4
+  // the per-onboarding-run cost cap is $0.10. Without per-run logs we
+  // can't audit that empirically — only model the cost from invoices.
+  // Single JSON line written to server stdout (Vercel logs), grep-able
+  // via dashboard. NO PII (no email, no name, no IP) — only user_id
+  // (a uuid, not personal data) plus aggregate fields.
+  //
+  // Promoted to a behavioral_events row in Phase 2 once the
+  // ai_call_log dedicated table ships (deferred to avoid mid-Phase-1.5
+  // schema churn).
+  const totalDurationMs = Date.now() - requestStartedAt;
+  const costAuditLine = {
+    event: "onboarding_chat",
+    user_id: user.id,
+    cost_estimate_usd: Number(costEstimateUsd.toFixed(6)),
+    cost_cap_usd: ONBOARDING_COST_CAP_USD,
+    cost_cap_breached: costEstimateUsd > ONBOARDING_COST_CAP_USD,
+    models_used: modelsUsed,
+    intent_topics_count: intent.topics.length,
+    intent_paywall_pref: intent.paywallPref,
+    intent_depth_pref: intent.depthPref,
+    proposals_returned: proposals.length,
+    duration_ms: totalDurationMs,
+    ts: new Date().toISOString(),
+  };
+  console.log(JSON.stringify(costAuditLine));
+  if (costAuditLine.cost_cap_breached) {
+    console.warn(
+      `[/api/onboarding/chat] cost cap breached: $${costEstimateUsd.toFixed(4)} > $${ONBOARDING_COST_CAP_USD.toFixed(4)} for user ${user.id}`
+    );
   }
 
   const response: ChatResponseBody = {
