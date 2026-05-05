@@ -91,7 +91,7 @@ insert into public.source_catalog (
     array['medicine', 'sciences'],
     array['oncology', 'immunology', 'clinical_trials'],
     'paid',
-    None,  -- free abstracts; full text requires institutional access
+    null,  -- free abstracts; full text requires institutional access (use null, NOT None)
     'weekly',
     array['global'],
     0.95,
@@ -100,18 +100,20 @@ insert into public.source_catalog (
     array['oncology', 'immunology', 'biotech_clinical_trials', 'drug_discovery', 'precision_medicine']
   ),
   -- ... more entries
-on conflict (name) do update set
-  url = excluded.url,
+on conflict (type, url) do update set
+  name = excluded.name,
   description = excluded.description,
   categories = excluded.categories,
   subcategories = excluded.subcategories,
   paywall_tier = excluded.paywall_tier,
+  paywall_cost_usd_monthly = excluded.paywall_cost_usd_monthly,
+  update_cadence = excluded.update_cadence,
   quality_score = excluded.quality_score,
   recommended_for_topics = excluded.recommended_for_topics,
   updated_at = now();
 ```
 
-(Adjust the conflict target to match the actual UNIQUE constraint on `source_catalog` once the table ships — likely `(name, type)` or just `id`.)
+The actual UNIQUE constraint on `source_catalog` is `(type, url)` per migration `20260510000000_source_catalog.sql`. Always use that as the `on conflict` target. `oauth_provider` must be one of the enum values: `'reddit'`, `'x'`, `'youtube'`, `'discord'` (or `null` for non-OAuth sources).
 
 ## NEVER
 
