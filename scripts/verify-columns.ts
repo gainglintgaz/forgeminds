@@ -466,6 +466,7 @@ const ALWAYS_OK = new Set(["*", "count", "exact", "head"]);
 const PENDING_MIGRATION_TABLES = new Set<string>([
   "source_catalog",      // 20260510000000_source_catalog.sql (Phase 1.5)
   "source_suggestions",  // 20260510000001_source_suggestions.sql (Phase 1.5)
+  "article_outcomes",    // 20260601000000_article_outcomes.sql (Phase 2 prep)
 ]);
 
 async function main() {

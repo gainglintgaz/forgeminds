@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ArticleOutcomeBar, type Outcome } from "@/components/briefs/article-outcome-bar";
 
-export const revalidate = 60;
+// Per-render dynamic — outcomes change on every save/dismiss click and
+// the page should reflect them on refresh. revalidate disabled.
+export const dynamic = "force-dynamic";
 
 interface BriefDetail {
   id: string;
@@ -30,6 +33,12 @@ interface ArticleRow {
   url: string | null;
   source_name: string | null;
   published_at: string | null;
+}
+
+interface OutcomeRow {
+  article_id: string;
+  outcome: Outcome;
+  rating: number | null;
 }
 
 export default async function BriefDetailPage({
@@ -63,6 +72,27 @@ export default async function BriefDetailPage({
       .select("id, title, summary, url, source_name, published_at")
       .in("id", articleIds);
     articles = (articleRows ?? []) as ArticleRow[];
+  }
+
+  // Pre-load existing outcomes for this user × these articles. One row
+  // per (user, article). RLS gates this to the current user. First
+  // paint then renders save/dismiss/rate buttons in correct state.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const outcomesByArticle = new Map<string, { outcome: Outcome; rating: number | null }>();
+  if (user && articleIds.length > 0) {
+    const { data: outcomeRows } = await supabase
+      .from("article_outcomes")
+      .select("article_id, outcome, rating")
+      .eq("user_id", user.id)
+      .in("article_id", articleIds);
+    for (const row of (outcomeRows ?? []) as OutcomeRow[]) {
+      outcomesByArticle.set(row.article_id, {
+        outcome: row.outcome,
+        rating: row.rating,
+      });
+    }
   }
 
   return (
@@ -150,39 +180,53 @@ export default async function BriefDetailPage({
           </p>
         ) : (
           <div className="space-y-3">
-            {articles.map((article) => (
-              <Card key={article.id}>
-                <CardHeader className="pb-2">
-                  {article.url ? (
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-base font-medium tracking-tight hover:underline underline-offset-4"
-                    >
-                      {article.title}
-                    </a>
-                  ) : (
-                    <span className="text-base font-medium tracking-tight">
-                      {article.title}
-                    </span>
-                  )}
-                  <p className="text-xs text-zinc-500 mt-1">
-                    {article.source_name ?? "Unknown source"}
-                    {article.published_at
-                      ? ` · ${new Date(article.published_at).toLocaleDateString()}`
-                      : ""}
-                  </p>
-                </CardHeader>
-                {article.summary ? (
-                  <CardContent>
-                    <p className="text-sm text-zinc-600 leading-relaxed line-clamp-3">
-                      {article.summary}
+            {articles.map((article) => {
+              const stored = outcomesByArticle.get(article.id);
+              return (
+                <Card key={article.id}>
+                  <CardHeader className="pb-2">
+                    {article.url ? (
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-base font-medium tracking-tight hover:underline underline-offset-4"
+                      >
+                        {article.title}
+                      </a>
+                    ) : (
+                      <span className="text-base font-medium tracking-tight">
+                        {article.title}
+                      </span>
+                    )}
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {article.source_name ?? "Unknown source"}
+                      {article.published_at
+                        ? ` · ${new Date(article.published_at).toLocaleDateString()}`
+                        : ""}
                     </p>
+                  </CardHeader>
+                  <CardContent className={article.summary ? undefined : "pt-0"}>
+                    {article.summary ? (
+                      <p className="text-sm text-zinc-600 leading-relaxed line-clamp-3 mb-2">
+                        {article.summary}
+                      </p>
+                    ) : null}
+                    {/* Outcome bar — auth-gated server-side via RLS; if user
+                        is somehow unauthenticated we still render a disabled
+                        bar but the RPC will reject. */}
+                    {user ? (
+                      <ArticleOutcomeBar
+                        articleId={article.id}
+                        briefId={brief.id}
+                        initialOutcome={stored?.outcome ?? "no_action"}
+                        initialRating={stored?.rating ?? null}
+                      />
+                    ) : null}
                   </CardContent>
-                ) : null}
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
