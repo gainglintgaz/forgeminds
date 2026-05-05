@@ -1,5 +1,30 @@
 # ForgeMinds — Personal Intelligence OS
 
+## 🔴 AI-FIRST + DATA FLYWHEEL CONTRACT (added 2026-05-05)
+
+ForgeMinds is governed by two mandatory rule files auto-loaded from `.claude/rules/`:
+
+1. **`ai-first-principles.md`** — universal AI-first architectural principles. **5-question audit, Trust Ladder (Loop 0 → Loop 6+), feature gating states (HIDDEN / LOCKED / PREVIEW / AVAILABLE / RECOMMENDED), anti-fabrication rules, Data Threshold pattern.** Read this BEFORE designing any feature.
+
+2. **`data-flywheel.md`** — operational counterpart. **7 contribution types, schema patterns (Postgres-shaped), k=N privacy rule (default 5), contribution UX flow, cold-start strategy, moderation rules, AI/LLM rules with substring validation, sequenced build phases (A→G).** Read this BEFORE designing any data flow that captures user input.
+
+ForgeMinds-specific worksheets (filled-in answers per the universal rules):
+
+- **`AI_FIRST_AUDIT.md`** at project root — 5-question audit results, Trust Ladder mapping, per-feature gating state, anti-fabrication enforcement matrix. **Re-run audit at every phase close.**
+- **`DATA_FLYWHEEL.md`** at project root — domain mapping (article = entity, brief delivery = cycle), 7-contribution-types table mapped to ForgeMinds schemas, k=N choices, cold-start copy, sequenced phases mapped to ForgeMinds Phase 0-10 roadmap, locked-state copy templates, schema migration plan, AI/LLM rule application, contributor pact text.
+
+**Hierarchy when a feature is being designed:**
+1. `ai-first-principles.md` — *can this feature pass the 5-question audit?*
+2. `data-flywheel.md` — *what real evidence backs every claim, what's the locked-state copy, what's the unlock trigger?*
+3. `AI_FIRST_AUDIT.md` + `DATA_FLYWHEEL.md` — *how does this map onto ForgeMinds-specific phases / schemas / users?*
+4. Existing factory rules (VIBE 55-57, factory CLAUDE.md Rule 18-19, lessons #97-100) — supplemental.
+
+**The locked-state copy is written BEFORE the unlock logic.** If the locked-state copy can't be written honestly ("we need X cycles to unlock this"), the feature is premature — park it as a future unlock with an honest "not yet" reason.
+
+**Reconciliation:** these universal rules supersede the lighter-weight VIBE Rule 57 / factory Rule 19 written 2026-05-05. The newer files are more rigorous (Trust Ladder, feature gating states, substring validators, k=N). Where they conflict, the universal files win.
+
+---
+
 ## 🔴 AI-ASSISTED DISCOVERY PRINCIPLE (added 2026-05-04 — Phase 1.5 pivot)
 
 **ForgeMinds is an AI-first multi-tenant SaaS, not a personal pipeline.** Every user has wildly varied interests, expertise, budgets, and time. Most users do NOT know which RSS feeds, APIs, or databases would help them. The product's job is to help them figure that out — not require them to know in advance.
