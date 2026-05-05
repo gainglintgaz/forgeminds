@@ -18,6 +18,7 @@
     "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
     "verify:cron-empty-handling": "tsx scripts/verify-cron-empty-handling.ts",
     "verify:source-catalog": "tsx scripts/verify-source-catalog.ts",
+    "embed:catalog": "tsx scripts/embed-source-catalog.ts",
     "print:bootstrap-sql": "tsx scripts/print-bootstrap-sql.ts",
     "verify:phase-1": "tsx scripts/verify-phase-1.ts",
     "verify:phase-1:no-e2e": "tsx scripts/verify-phase-1.ts --skip-e2e",
