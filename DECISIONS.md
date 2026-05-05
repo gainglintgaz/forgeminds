@@ -405,3 +405,29 @@ The audit flagged that `fetchFinnhubNews()`, `fetchBenzingaNews()`, `fetchAlpaca
 
 **Next session:** Apply the two Phase 1.5 migrations + the RAG RPC seed, dispatch the curator subagent for the first 3-5 categories, run a real onboarding round-trip with my own description, iterate on quality from there.
 
+
+---
+
+## 2026-05-05 — Architect+ tier + licensed-data integration model
+
+**Decision:** ForgeMinds will offer a tier above Architect ($34.99/mo) called **Architect+** that gives users access to per-vector licensed-data integrations (Morningstar / PitchBook / Bloomberg / UpToDate / Westlaw / etc.) via two modes: **BYOS** (user's own subscription, proxied through ForgeMinds) and **Resold seat** (ForgeMinds bulk-buys at wholesale + resells at retail + 10-15% markup).
+
+**The non-negotiable rule:** ForgeMinds **NEVER pre-pays for any provider** before users have committed money. Every provider opens for Resold mode only after:
+1. ≥10 paying Architect+ users have waitlisted that specific provider
+2. Wholesale negotiation produces ≥30% projected gross margin
+3. THEN the bulk deal is signed
+
+Until then it's BYOS-only or LOCKED. Costs ForgeMinds $0 to support.
+
+**Why:** professional-grade data layers exist for all 14 vectors (PitchBook for finance, UpToDate for clinicians, Westlaw for legal, etc.) but cost $50-$3000/mo at retail. Pre-paying these without committed user demand kills the unit economics. The BYOS-first / waitlist-second / pre-pay-never approach respects factory CLAUDE.md §8 tiered-cohort design (don't ship aggregate products until enough demand for honest pricing).
+
+**Why this beats Perplexity Computer for Finance:** Perplexity launched professional finance with licensed data (May 5, 2026). They're vertical-deep on finance only. ForgeMinds wins on horizontal breadth (14 vectors × per-user Voice DNA × Brain × Community Brain) plus per-vector opt-in to licensed data — users only pay for the verticals they actually want professional-grade data on.
+
+**File reference:** `projects/forgeminds/VECTORS.md` codifies the 14 vectors, ~140 subcategories, V1 status per vector, and the Architect+ architectural surface (data_providers table, user_data_subscriptions, data_provider_query_log, provider abstraction layer).
+
+**Phase mapping:**
+- Phase 7 ships the registry + abstraction layer + first 1-2 BYOS providers
+- Phase 10 ships the Architect+ pricing tier in Stripe + the per-vector toggle UI
+- Resold mode opens per-provider only when waitlist crosses threshold
+
+**Cost realism:** at 100 Architect+ users × $99/mo = $9,900 MRR. If 30% of them want one BYOS connection (~$10/mo premium each) → $300/mo BYOS revenue, ~$0 cost. If 50 of them waitlist for Morningstar Resold → we negotiate a 50-seat deal at $300/seat (vs $500 retail) → bill them $550/mo each → $12,500 net revenue per month at $15K cost = $-2,500. Bad math. Need 75+ committed before bulk Morningstar deal. **The waitlist threshold is THE financial gate, not a feature gate.**
