@@ -464,9 +464,9 @@ const ALWAYS_OK = new Set(["*", "count", "exact", "head"]);
  * "Pending migrations" so the unblocking step is documented.
  */
 const PENDING_MIGRATION_TABLES = new Set<string>([
-  "source_catalog",      // 20260510000000_source_catalog.sql (Phase 1.5)
-  "source_suggestions",  // 20260510000001_source_suggestions.sql (Phase 1.5)
-  "article_outcomes",    // 20260601000000_article_outcomes.sql (Phase 2 prep)
+  // 20260510000000_source_catalog.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
+  // 20260510000001_source_suggestions.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
+  "article_outcomes",    // 20260601000000_article_outcomes.sql (Phase 2 prep — not applied yet)
 ]);
 
 async function main() {

@@ -19,6 +19,14 @@
 -- been applied (so the table + index exist + are populated).
 -- ════════════════════════════════════════════════════════════════════
 
+-- SECURITY INVOKER (not DEFINER): the function only does a SELECT against
+-- public.source_catalog, which authenticated users can already read via
+-- the RLS policy `source_catalog_read_authenticated` (using is_active=true).
+-- INVOKER runs the query in the caller's RLS context — same result set,
+-- no advisor warning about "Signed-In Users Can Execute SECURITY DEFINER
+-- Function". Pinned search_path is still mandatory per Supabase advisor
+-- best practice (CVE-class search_path injection in any functions on
+-- exposed API schemas). Decision recorded 2026-05-05 in DECISIONS.md.
 create or replace function public.match_source_catalog(
   query_embedding       vector(1536),
   match_count           integer default 25,
@@ -39,7 +47,7 @@ returns table (
   similarity                  numeric
 )
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 begin

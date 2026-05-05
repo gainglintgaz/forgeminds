@@ -21,14 +21,15 @@
 
 ### Remaining for Phase 1.5 close
 
-1. ⏳ Apply migrations 20260510000000_source_catalog.sql + 20260510000001_source_suggestions.sql to dev project
-2. ⏳ Apply seeds/source_catalog_rag_rpc.sql (`match_source_catalog` RPC)
-3. ⏳ Run source-catalog-curator subagent for ≥10 (category, subcategory) pairs to seed ≥200 sources (file-by-file commits per README in supabase/seeds/source_catalog/)
-4. ⏳ Run embed-source-catalog backfill script (Phase 1.5 close task — script not yet written)
-5. ⏳ Add ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY to .env.local + Vercel
-6. ⏳ Smoke test: real onboarding run → proposals returned → /onboarding/finalize → sources written
-7. ⏳ Run `npm run verify:phase-1-5` (with dev server) → all gates green
-8. ⏳ `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
+1. ✅ Apply migrations 20260510000000_source_catalog.sql + 20260510000001_source_suggestions.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
+2. ✅ Apply seeds/source_catalog_rag_rpc.sql + switch to SECURITY INVOKER — APPLIED 2026-05-05 (advisor confirmed clean: 5 known/accepted warnings, 0 new from Phase 1.5)
+3. ✅ Embed backfill script written (`scripts/embed-source-catalog.ts`, commit `f278ece`)
+4. ⏳ Add ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY to .env.local + Vercel
+5. ⏳ Run source-catalog-curator subagent for ≥10 (category, subcategory) pairs to seed ≥200 sources (file-by-file commits per README in supabase/seeds/source_catalog/)
+6. ⏳ Run embed-source-catalog backfill script after each curator seed batch
+7. ⏳ Smoke test: real onboarding run → proposals returned → /onboarding/finalize → sources written
+8. ⏳ Run `npm run verify:phase-1-5` (with dev server) → all gates green
+9. ⏳ `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
 
 ---
 

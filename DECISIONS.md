@@ -431,3 +431,36 @@ Until then it's BYOS-only or LOCKED. Costs ForgeMinds $0 to support.
 - Resold mode opens per-provider only when waitlist crosses threshold
 
 **Cost realism:** at 100 Architect+ users × $99/mo = $9,900 MRR. If 30% of them want one BYOS connection (~$10/mo premium each) → $300/mo BYOS revenue, ~$0 cost. If 50 of them waitlist for Morningstar Resold → we negotiate a 50-seat deal at $300/seat (vs $500 retail) → bill them $550/mo each → $12,500 net revenue per month at $15K cost = $-2,500. Bad math. Need 75+ committed before bulk Morningstar deal. **The waitlist threshold is THE financial gate, not a feature gate.**
+
+---
+
+## 2026-05-05 — Phase 1.5 schema applied to ForgeMinds dev (`ymgbjtgczgnooscigplb`)
+
+**Decision:** Applied 3 SQL files via Supabase SQL editor (manual paste, no MCP automation due to OAuth token routing issues with the plugin Supabase MCP):
+
+1. `supabase/migrations/20260510000000_source_catalog.sql` → tables + enums + indexes + RLS + grants
+2. `supabase/migrations/20260510000001_source_suggestions.sql` → tables + enums + indexes + RLS + trigger + grants
+3. `supabase/seeds/source_catalog_rag_rpc.sql` → `match_source_catalog` RPC with pinned search_path
+
+**Advisor delta:** Re-running the Supabase Security Advisor immediately after migrations surfaced 6 WARN findings → fixed 1, accepted 5:
+
+**Fixed (1):**
+- `match_source_catalog` was originally written as `SECURITY DEFINER` (matching the pattern of other DEFINER RPCs in the schema). Advisor flagged it as "Signed-In Users Can Execute SECURITY DEFINER Function." Switched to `SECURITY INVOKER` via `alter function ... security invoker;` since the function only does a SELECT against `source_catalog` (authenticated users already have read access via the `source_catalog_read_authenticated` RLS policy with `is_active = true`). Same query results, more secure caller-context execution, advisor warning eliminated. **The committed `source_catalog_rag_rpc.sql` was updated to use `security invoker` from the start so future fresh applies (e.g. on staging projects, dev project rebuilds) don't trip the same warning.**
+
+**Accepted/known carryovers (5):**
+- 3× `extension_in_public` for pg_trgm, vector, pg_net — deferred to Phase 2 cleanup migration (per 2026-05-04 entry above)
+- 1× `track_event` SECURITY DEFINER callable by authenticated — INTENTIONAL by design (per 2026-05-04 entry — `track_event` is the client-callable analytics surface; SECURITY DEFINER is required so it can write to `behavioral_events` even when RLS would block direct INSERT)
+- 1× `auth_leaked_password_protection` — Dashboard toggle requiring Supabase Pro tier; deferred per IDEAS.md until Phase 10 launch prerequisite
+
+**Net state at Phase 1.5 schema close:** zero unintentional advisor warnings introduced by Phase 1.5 migrations.
+
+**Verification (verbatim from SQL editor 2026-05-05):**
+- `select table_name from information_schema.tables where table_schema='public' and table_name in ('source_catalog','source_suggestions');` → 2 rows
+- `select proname, proconfig from pg_proc where pronamespace='public'::regnamespace and proname='match_source_catalog';` → 1 row, `proconfig = {search_path=public, pg_temp}`
+- `select count(*) from public.source_catalog;` → 0 (catalog ready for seeding via curator subagent)
+
+**Reference:**
+- Project: `ForgeMinds cloud version` (`ymgbjtgczgnooscigplb`, us-east-1, ACTIVE_HEALTHY)
+- Region label "PRODUCTION" in Supabase dashboard is the default for non-branch projects; ForgeMinds has zero public traffic so functionally still dev. Factory CLAUDE.md §5 production-data-protection rules apply once real user data lands here, not before.
+- Plugin Supabase MCP routing fight (Claude Code dedupes `mcp.supabase.com/mcp` URLs) blocked MCP automation; SQL editor paste path used as fallback. Documented for future reference.
+
