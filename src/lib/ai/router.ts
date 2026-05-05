@@ -1,27 +1,34 @@
 import type { AIRequest, AIResponse, ModelProvider, TaskType } from "@/lib/types/ai";
 import { callGemini } from "./providers/gemini";
 import { callGrok } from "./providers/grok";
+import { callClaude } from "./providers/claude";
+import { callPerplexity } from "./providers/perplexity";
 
-// Task → preferred model mapping
+// Task → preferred model mapping.
+// `embed` is intentionally NOT routed here — embeddings have a
+// vector-shaped response that doesn't fit AIResponse. Call
+// `embedText()` from `./providers/openai` directly instead.
 const TASK_MODEL_MAP: Record<TaskType, ModelProvider> = {
   "score": "gemini-flash",
   "categorize": "gemini-flash",
   "generate-social": "grok",
-  "generate-brief": "grok",
-  "generate-blog": "grok",
-  "deep-analysis": "grok",
-  "embed": "openai-embeddings",
-  "research": "perplexity",
+  "generate-brief": "claude-sonnet",     // brief synthesis: writing quality matters
+  "generate-blog": "claude-sonnet",      // long-form content: voice + structure
+  "deep-analysis": "claude-sonnet",      // multi-step reasoning, complex prompts
+  "embed": "openai-embeddings",          // not routed — see embedText() in openai.ts
+  "research": "perplexity",              // live-web grounded research
 };
 
-// Fallback chain: if primary fails, try these in order
+// Fallback chain: if primary fails, try these in order. Skip routing
+// to providers that produce a fundamentally different response shape
+// (embeddings, citations) — those are explicit-call APIs.
 const FALLBACK_CHAIN: Record<ModelProvider, ModelProvider[]> = {
-  "gemini-flash": ["grok"],
-  "grok": ["gemini-flash"],
+  "gemini-flash": ["grok", "claude-haiku"],
+  "grok": ["gemini-flash", "claude-haiku"],
   "claude-haiku": ["grok", "gemini-flash"],
-  "claude-sonnet": ["grok"],
+  "claude-sonnet": ["claude-haiku", "grok"],
   "openai-embeddings": [],
-  "perplexity": ["grok"],
+  "perplexity": ["claude-sonnet"],       // research → fall back to a smart text model
   "local": [],
 };
 
@@ -60,8 +67,31 @@ async function callModel(provider: ModelProvider, request: AIRequest): Promise<O
       return callGemini(request);
     case "grok":
       return callGrok(request);
-    default:
+    case "claude-haiku":
+      return callClaude({ ...request, useHaiku: true });
+    case "claude-sonnet":
+      return callClaude({ ...request, useHaiku: false });
+    case "perplexity": {
+      // Drop citations from the routed response so the shape matches
+      // AIResponse. Callers that need citations should call
+      // callPerplexity directly instead of going through the router.
+      const { citations: _citations, ...rest } = await callPerplexity(request);
+      void _citations;
+      return rest;
+    }
+    case "openai-embeddings":
+      throw new Error(
+        "[AI Router] openai-embeddings cannot be routed through routeAIRequest — embeddings return a vector, not text. Call embedText() from @/lib/ai/providers/openai directly."
+      );
+    case "local":
+      throw new Error("[AI Router] 'local' provider not yet implemented (Phase 6+: Ollama / on-device).");
+    default: {
+      // Exhaustive switch: TypeScript will error here if a new provider
+      // is added to the ModelProvider type without a case above.
+      const _exhaustive: never = provider;
+      void _exhaustive;
       throw new Error(`Provider ${provider} not yet implemented`);
+    }
   }
 }
 
