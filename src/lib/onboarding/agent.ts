@@ -47,7 +47,13 @@ Rules:
 - Diversify source types: include at least one government/institutional source if relevant, one peer-reviewed/journal source if depth=deep, and at least one community source (subreddit/newsletter) for color.
 - For paid sources: explicitly mention the cost in the reason (e.g. "$39/mo via WSJ subscription"). Cost transparency is a trust contract.
 - Output STRICT JSON: an array of objects with shape { catalogId: string, reason: string, enabled: boolean }. No prose, no markdown, no code fences.
-- Set \`enabled: true\` for every recommendation (user toggles off in UI).`;
+- Set \`enabled: true\` for every recommendation (user toggles off in UI).
+
+ANTI-FABRICATION RULES (non-negotiable, per .claude/rules/data-flywheel.md §8):
+- Do NOT invent facts about the source. Specifically, do NOT claim subscriber counts, article/post/episode counts, publication frequency numbers, author names, awards, or accuracy stats unless they appear LITERALLY in the candidate's description text shown above.
+- If you have no specific verifiable fact about the source, ground your reason in: (a) what the USER said about their interests, and (b) words/phrases that appear in the candidate's description.
+- A claim like "10K subscribers" or "200+ articles per month" or "daily updates" must be a verbatim phrase from the description — otherwise omit it. Drop the source rather than fabricate.
+- The reason field's primary job is to connect the user's stated intent to a source from the candidate list — NOT to puff up the source with invented stats.`;
 
 export interface ProposeOptions {
   /** How many candidates to pull from RAG before asking the LLM to pick. */
@@ -139,13 +145,22 @@ export async function proposeSources(
 
   // Map picks back onto candidates by catalogId. Drop any pick that
   // doesn't reference a known candidate (defends against the LLM
-  // hallucinating a catalog id).
+  // hallucinating a catalog id) OR contains ungrounded factual claims
+  // about the source (defends against the LLM puffing the source with
+  // invented stats — anti-fabrication rule per data-flywheel.md §8.2).
   const candidatesById = new Map(candidates.filter((c) => c.catalogId).map((c) => [c.catalogId!, c]));
   const proposals: SourceProposal[] = [];
   for (const pick of picks) {
     const candidate = candidatesById.get(pick.catalogId);
     if (!candidate) {
       console.warn(`[onboarding/agent] LLM proposed unknown catalogId: ${pick.catalogId}`);
+      continue;
+    }
+    const grounding = validateReasonGrounding(pick.reason, candidate);
+    if (!grounding.grounded) {
+      console.warn(
+        `[onboarding/agent] dropping pick ${candidate.name} — ungrounded factual claim(s) in reason: ${grounding.ungroundedClaims.join(", ")}`
+      );
       continue;
     }
     proposals.push({
@@ -227,6 +242,68 @@ function isValidPick(
     typeof o.reason === "string" &&
     o.reason.length > 0
   );
+}
+
+/**
+ * Patterns that indicate the agent made a quantitative or temporal
+ * factual claim about the source. If the matched phrase doesn't appear
+ * (case-insensitively) in the candidate's description, it's a fabrication
+ * and the pick is dropped.
+ *
+ * Why drop instead of warn: per .claude/rules/data-flywheel.md §8.2,
+ * "Reject and retry if not — never let unvalidated output reach users."
+ * Dropping is the cheaper local equivalent of retrying — fewer proposals
+ * for one user is far better than one fabricated stat.
+ *
+ * Patterns intentionally narrow. Things like "primary-source FOMC papers"
+ * are NOT flagged because they're paraphrased domain language, not
+ * quantitative claims. Things like "10K subscribers" or "200+ articles
+ * per month" ARE flagged because the agent has no way to know that.
+ */
+const FACTUAL_CLAIM_PATTERNS: RegExp[] = [
+  // Numeric quantity + countable: "10K subscribers", "200 articles", "3M users"
+  /\b\d+[KkMm]?\+?\s*(articles?|subscribers?|users?|members?|papers?|posts?|readers?|listeners?|episodes?|videos?|stories?|issues?)\b/g,
+  // Per-period counts: "10 articles/day", "5 episodes per week"
+  /\b\d+[KkMm]?\+?\s*(?:\/|\bper\s+)(day|week|month|year|hour)\b/g,
+  // "founded in YYYY" / "since YYYY" — claims about source provenance
+  /\b(?:founded|established|since|launched)\s+(?:in\s+)?\d{4}\b/g,
+  // Award / accuracy claims: "97% accurate", "Pulitzer-winning"
+  /\b\d+%\s*(accurate|accuracy)\b/g,
+  /\b(pulitzer|peabody|webby|emmy|edgar|oscar)[\s-]?(prize|award|winning|winner)?\b/g,
+];
+
+interface GroundingResult {
+  grounded: boolean;
+  ungroundedClaims: string[];
+}
+
+export function validateReasonGrounding(
+  reason: string,
+  candidate: SourceProposal
+): GroundingResult {
+  const reasonLower = reason.toLowerCase();
+  // Check claims against the candidate's description AND its name —
+  // a name like "Pulitzer-Winning Quarterly" makes "pulitzer-winning"
+  // a verifiable claim.
+  const hayLower = (candidate.description + " " + candidate.name).toLowerCase();
+  const ungrounded: string[] = [];
+
+  for (const pattern of FACTUAL_CLAIM_PATTERNS) {
+    // Reset lastIndex on the regex (g flag → stateful)
+    pattern.lastIndex = 0;
+    const matches = reasonLower.matchAll(pattern);
+    for (const match of matches) {
+      const claim = match[0].trim();
+      if (!hayLower.includes(claim)) {
+        ungrounded.push(claim);
+      }
+    }
+  }
+
+  return {
+    grounded: ungrounded.length === 0,
+    ungroundedClaims: Array.from(new Set(ungrounded)),
+  };
 }
 
 export class AgentError extends Error {
