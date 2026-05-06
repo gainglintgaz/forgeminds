@@ -50,7 +50,7 @@ export const MODELS = {
    * Google Gemini — score / categorize tasks (bulk, low-cost).
    *
    * `gemini-2.0-flash` may be deprecated by Google in favor of
-   * `gemini-2.5-flash` per their roadmap. TODO: verify against
+   * `gemini-2.5-flash` per their roadmap. Pending: verify against
    * Google's deprecation page and bump when confirmed. Conservative
    * default for now to avoid breaking the score pipeline.
    */

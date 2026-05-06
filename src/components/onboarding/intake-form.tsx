@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const PLACEHOLDER = `e.g. I'm a clinician interested in oncology breakthroughs and clinical trial readouts. I want depth, not headlines — peer-reviewed sources are great. Daily updates are fine. I also want to keep up with monetary policy at a global level (Fed, ECB, BoJ) — willing to pay for FT or Bloomberg if it's worth it.`;
+const INTAKE_EXAMPLE_PROMPT = `e.g. I'm a clinician interested in oncology breakthroughs and clinical trial readouts. I want depth, not headlines — peer-reviewed sources are great. Daily updates are fine. I also want to keep up with monetary policy at a global level (Fed, ECB, BoJ) — willing to pay for FT or Bloomberg if it's worth it.`;
 
 const MIN_LENGTH = 30;
 
@@ -55,7 +55,7 @@ export function IntakeForm() {
       <Textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder={PLACEHOLDER}
+        placeholder={INTAKE_EXAMPLE_PROMPT}
         rows={8}
         className="text-base"
         disabled={submitting}

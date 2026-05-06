@@ -14,7 +14,7 @@
  * redirects and reads up to 2 MB of body — running it from the
  * browser would expose the user's IP to third parties + leak their
  * Supabase session origin. Server-side keeps both private + lets us
- * apply rate limiting (TODO once Phase 1.5 multi-user shipping).
+ * apply rate limiting (pending Phase 1.5 multi-user traffic — see CURRENT_SPRINT.md).
  */
 
 import { NextRequest, NextResponse } from "next/server";
