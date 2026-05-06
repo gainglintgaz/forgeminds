@@ -269,3 +269,34 @@ If user connects LinkedIn (Phase 9 scheduler+OAuth scope), agent could pre-extra
 
 ### Multi-language source catalog
 Catalog is English-only at Phase 1.5 close. `geography` field includes language codes; expanding catalog to non-English sources is future work. **Adopt** post-Phase-10 (international expansion).
+
+---
+
+## 🟢 Production fetcher must send a browser User-Agent header
+
+Surfaced 2026-05-06 by source-catalog-curator subagent during medicine/oncology batch. Lancet Oncology, JCO, Annals of Oncology RSS feeds — all three return HTTP 200 to a real browser User-Agent but 403 (Cloudflare bot challenge) to bare `fetch()` without UA. Curator verified content via curl with explicit UA. The catalog rows are correct; the runtime risk is in `/api/cron/ingest`.
+
+**Action:** before Phase 2 ingest goes live for any user with these journal feeds, audit the fetch path in `src/lib/pipeline/fetchers/rss.ts` (or wherever `fetch(source.url)` runs). Add a `User-Agent: ForgeMinds/1.0 (+https://forgeminds.app)` header. Identifying ourselves is the right thing — Cloudflare is happy with named bots, hostile to anonymous ones. Three journals × dozens of users could mean hundreds of 403s/day if we don't fix it. **Adopt** during Phase 2 fetcher hardening (parallel with `article_outcomes` migration apply).
+
+---
+
+## 🟡 Perplexity Finance Search as Layer-1 source for investment-vector action templates
+
+Perplexity launched `finance_search` tool in the Agent API on 2026-05-06 — single tool call returning structured financial data (quotes, fundamentals, earnings, segments, analyst estimates, ETF constituents, ownership, corporate actions) with cited sources, $5/1k invocations + token usage separate. FinSearchComp T1 benchmark: highest accuracy + lowest cost-per-correct-answer in cohort. ([blog](https://www.perplexity.ai/hub/blog/introducing-finance-search-in-the-agent-api), [docs](https://docs.perplexity.ai/docs/agent-api/finance-search))
+
+**Why this fits ForgeMinds:**
+- Direct match for VECTORS.md vector #1 `investment` (subcategories: stocks, ETFs, IPO_SPAC, fixed_income_bonds, options) and partially #2 `build` (competitive comps when researching public-company adjacencies).
+- Fits the **4-layer no-hallucination architecture (CLAUDE.md)** as Layer 1 — REAL DATA SOURCES. The whole point of Layer 1 is "external APIs return ground truth"; Finance Search is exactly that, with citations baked in.
+- Already have `src/lib/ai/providers/perplexity.ts` wired. Adding Finance Search = pass `tools: [{type: "finance_search"}]` in the request body when invoking sonar/sonar-pro for finance-vector tasks. ~30 lines of glue.
+- Could **replace or augment** the planned Finnhub / Alpaca / Alpha Vantage / Benzinga calls in pipeline ingest. Cost comparison: Finance Search at $0.005/call vs each separate provider's per-call fee + maintenance burden of 4 separate clients.
+
+**Cost realism:** Builder-tier user ($14.99/mo, ~30 briefs/mo, ~10 finance lookups per investment-vector brief) → ~$1.50/mo cost = ~10% of revenue. Architect tier ($34.99/mo, heavier use) → fine. Free Explorer tier should not get Finance Search by default; rate-limit or feature-flag.
+
+**Tradeoffs:**
+- **Opaque routing.** Finance Search routes to "licensed providers behind the scenes" — we don't know which provider answered, only that it was cited. For audit-grade work (Architect+ tier vector trips), that may not be enough; consulting clients may want explicit provider attribution. Architect+ tier (BYOS / Resold per VECTORS.md) is still the right path for users who need provider-specific access.
+- **Single point of failure.** If Perplexity has an outage or changes pricing structure, every investment-vector action template degrades. Mitigation: keep one direct provider (Finnhub or Alpaca) wired as fallback; Finance Search is primary.
+- **Doesn't replace Architect+ tier.** Bloomberg / FactSet / S&P / Morningstar still warrant BYOS/Resold integration for users who already pay them. Finance Search is the **default tier** Layer-1 source; Architect+ providers are the **upgrade path**.
+
+**Status:** **DEFER to Phase 3** (action templates for investment vector). Pencil into Phase 3 architecture as the default Layer-1 source for investment, build (when researching public-company comps), and partial #6 consulting (when finance-domain consulting templates surface). Don't add to Phase 1.5 — would balloon scope.
+
+**Implementation when adopted:** small wrapper in `src/lib/ai/providers/perplexity.ts` extending `PerplexityRequest` with `tools?: ('web_search' | 'finance_search' | 'fetch_url')[]` plus a `max_steps` field; existing `callPerplexity` already passes through to body. New cost-tracking line item: `finance_search_invocations` count separate from token counts so the audit log can attribute the $5/1k charge cleanly.
