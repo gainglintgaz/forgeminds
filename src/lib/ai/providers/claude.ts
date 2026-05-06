@@ -1,4 +1,5 @@
 import type { AIRequest, AIResponse } from "@/lib/types/ai";
+import { MODELS, COSTS } from "../models";
 
 /**
  * Anthropic Claude provider — text generation via Messages API.
@@ -12,26 +13,20 @@ import type { AIRequest, AIResponse } from "@/lib/types/ai";
  * prompt caching amortizes that cost across the conversation. To
  * enable caching, pass `cacheableSystemPrompt` instead of `systemPrompt`.
  *
- * Pricing (2026-05): https://www.anthropic.com/pricing
- *   sonnet 3.5/4: $3.00 / $15.00 per 1M input/output
- *   haiku 3.5:    $0.80 / $4.00  per 1M input/output
- *   cached read:  10% of base input price
- *   cache write:  125% of base input price (one-time per cache miss)
- *
- * Costs below are sonnet 4 baseline; calculated cost reflects what
- * Anthropic actually billed (output of a non-streaming call returns
- * usage stats — we trust those, not our local guess).
+ * Model pins + cost constants live in @/lib/ai/models — single source
+ * of truth for all five providers. Bumping versions or adjusting
+ * pricing happens there, not here.
  *
  * Why server-side only: Anthropic SDK + secret API key. Privacy rule
  * #38 (factory): never `dangerouslyAllowBrowser: true`.
  */
 
-const SONNET_MODEL = "claude-sonnet-4-20250514";
-const HAIKU_MODEL = "claude-haiku-4-5";
-const SONNET_INPUT_PER_M = 3.0;
-const SONNET_OUTPUT_PER_M = 15.0;
-const HAIKU_INPUT_PER_M = 0.8;
-const HAIKU_OUTPUT_PER_M = 4.0;
+const SONNET_MODEL = MODELS.CLAUDE_SONNET;
+const HAIKU_MODEL = MODELS.CLAUDE_HAIKU;
+const SONNET_INPUT_PER_M = COSTS.SONNET_INPUT_PER_M;
+const SONNET_OUTPUT_PER_M = COSTS.SONNET_OUTPUT_PER_M;
+const HAIKU_INPUT_PER_M = COSTS.HAIKU_INPUT_PER_M;
+const HAIKU_OUTPUT_PER_M = COSTS.HAIKU_OUTPUT_PER_M;
 
 export interface ClaudeRequest extends AIRequest {
   /**
@@ -117,10 +112,13 @@ export async function callClaude(
   const cacheReadTokens = usage.cache_read_input_tokens || 0;
   const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
 
-  // Cost reflects cache pricing: cache_read = 10% input, cache_creation = 125% input.
+  // Cost reflects cache pricing per the registry's CACHE_*_MULTIPLIER
+  // constants (10% read, 125% write — Anthropic standard).
   const baseInputCost = (inputTokens * inputPerM) / 1_000_000;
-  const cacheReadCost = (cacheReadTokens * inputPerM * 0.1) / 1_000_000;
-  const cacheCreationCost = (cacheCreationTokens * inputPerM * 1.25) / 1_000_000;
+  const cacheReadCost =
+    (cacheReadTokens * inputPerM * COSTS.CACHE_READ_MULTIPLIER) / 1_000_000;
+  const cacheCreationCost =
+    (cacheCreationTokens * inputPerM * COSTS.CACHE_WRITE_MULTIPLIER) / 1_000_000;
   const outputCost = (outputTokens * outputPerM) / 1_000_000;
 
   return {

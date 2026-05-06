@@ -1,8 +1,9 @@
 import type { AIRequest, AIResponse } from "@/lib/types/ai";
+import { MODELS, COSTS } from "../models";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
-const COST_PER_M_INPUT = 0.075;
-const COST_PER_M_OUTPUT = 0.30;
+const GEMINI_MODEL = MODELS.GEMINI_FAST;
+const COST_PER_M_INPUT = COSTS.GEMINI_INPUT_PER_M;
+const COST_PER_M_OUTPUT = COSTS.GEMINI_OUTPUT_PER_M;
 
 export async function callGemini(
   request: AIRequest

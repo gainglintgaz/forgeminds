@@ -1,8 +1,9 @@
 import type { AIRequest, AIResponse } from "@/lib/types/ai";
+import { MODELS, COSTS } from "../models";
 
-const GROK_MODEL = "grok-3-mini-fast";
-const COST_PER_M_INPUT = 0.30;
-const COST_PER_M_OUTPUT = 0.50;
+const GROK_MODEL = MODELS.GROK;
+const COST_PER_M_INPUT = COSTS.GROK_INPUT_PER_M;
+const COST_PER_M_OUTPUT = COSTS.GROK_OUTPUT_PER_M;
 
 export async function callGrok(
   request: AIRequest

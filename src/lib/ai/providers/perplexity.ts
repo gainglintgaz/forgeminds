@@ -1,4 +1,5 @@
 import type { AIRequest, AIResponse } from "@/lib/types/ai";
+import { MODELS, COSTS } from "../models";
 
 /**
  * Perplexity Sonar provider — live web research with citations.
@@ -12,10 +13,14 @@ import type { AIRequest, AIResponse } from "@/lib/types/ai";
  *   - Multi-step agent (Phase 9.B): the "research" step that pulls
  *     real-time info before draft + schedule
  *
- * Pricing (2026-05): https://docs.perplexity.ai/guides/pricing
- *   sonar:        $1.00 in, $1.00 out per 1M
- *   sonar-pro:    $3.00 in, $15.00 out per 1M
- *   plus per-search request charge ($5/1K for sonar, $5/1K for pro)
+ * Phase 3+: Finance Search tool — the Agent API supports a
+ * `tools: [{type: 'finance_search'}]` flag that returns structured
+ * licensed financial data ($5/1k invocations + token usage). Direct
+ * fit for VECTORS.md vector #1 investment as a Layer-1 source. See
+ * IDEAS.md "Perplexity Finance Search as Layer-1 source for
+ * investment-vector action templates".
+ *
+ * Model pins + cost constants live in @/lib/ai/models.
  *
  * We default to sonar (the cheap one) — sonar-pro is reserved for
  * high-stakes deep-research turns where citation count and reasoning
@@ -24,14 +29,14 @@ import type { AIRequest, AIResponse } from "@/lib/types/ai";
  * Server-side only.
  */
 
-const SONAR_MODEL = "sonar";
-const SONAR_PRO_MODEL = "sonar-pro";
-const SONAR_INPUT_PER_M = 1.0;
-const SONAR_OUTPUT_PER_M = 1.0;
-const SONAR_SEARCH_PER_K = 5.0;
-const SONAR_PRO_INPUT_PER_M = 3.0;
-const SONAR_PRO_OUTPUT_PER_M = 15.0;
-const SONAR_PRO_SEARCH_PER_K = 5.0;
+const SONAR_MODEL = MODELS.PERPLEXITY;
+const SONAR_PRO_MODEL = MODELS.PERPLEXITY_PRO;
+const SONAR_INPUT_PER_M = COSTS.PERPLEXITY_INPUT_PER_M;
+const SONAR_OUTPUT_PER_M = COSTS.PERPLEXITY_OUTPUT_PER_M;
+const SONAR_SEARCH_PER_K = COSTS.PERPLEXITY_SEARCH_PER_K;
+const SONAR_PRO_INPUT_PER_M = COSTS.PERPLEXITY_PRO_INPUT_PER_M;
+const SONAR_PRO_OUTPUT_PER_M = COSTS.PERPLEXITY_PRO_OUTPUT_PER_M;
+const SONAR_PRO_SEARCH_PER_K = COSTS.PERPLEXITY_PRO_SEARCH_PER_K;
 
 export interface PerplexityRequest extends AIRequest {
   /** Use sonar-pro for deeper research; default sonar. */

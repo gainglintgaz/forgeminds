@@ -23,9 +23,11 @@
  * scrubbed of PII before reaching this function.
  */
 
-const EMBED_MODEL = "text-embedding-3-small";
-const EMBED_DIMENSIONS = 1536;
-const COST_PER_M_TOKENS = 0.02;
+import { MODELS, COSTS, EMBED_DIMENSIONS as REGISTRY_EMBED_DIMENSIONS } from "../models";
+
+const EMBED_MODEL = MODELS.OPENAI_EMBED;
+const EMBED_DIMENSIONS = REGISTRY_EMBED_DIMENSIONS;
+const COST_PER_M_TOKENS = COSTS.OPENAI_EMBED_PER_M;
 
 export interface EmbeddingResult {
   embedding: number[];
