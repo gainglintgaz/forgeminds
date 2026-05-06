@@ -60,7 +60,6 @@ interface CatalogRow {
   categories: string[] | null;
   quality_score: number | null;
   paywall_tier: string;
-  embedding: number[] | null;
 }
 
 async function main() {
@@ -82,11 +81,16 @@ async function main() {
     process.exit(1);
   }
 
-  // Pull all active rows. At Phase 1.5 close we expect ≥200, well within a
-  // single REST page (Supabase default limit 1000).
+  // Pull all active rows for non-vector gates. Excluding `embedding`
+  // here is intentional: pgvector serializes through PostgREST as a
+  // string ("[0.1,0.2,...]"), not a real number[], so an
+  // `Array.isArray(row.embedding)` check on the JS side always returns
+  // false and silently fails the embedding-coverage gate even when
+  // every row is correctly embedded. Use a server-side `count` for
+  // embedding presence instead (below).
   const { data, error } = await supabase
     .from("source_catalog")
-    .select("id, is_active, categories, quality_score, paywall_tier, embedding")
+    .select("id, is_active, categories, quality_score, paywall_tier")
     .eq("is_active", true)
     .limit(2000);
 
@@ -97,6 +101,23 @@ async function main() {
 
   const rows = (data ?? []) as CatalogRow[];
   console.log(`   ${rows.length} active rows loaded`);
+
+  // Server-side count of rows that actually have an embedding. Using
+  // .not("embedding", "is", null) keeps the comparison in Postgres
+  // where the column type is real, not in JS where it's a string.
+  const { count: embeddedCount, error: embedErr } = await supabase
+    .from("source_catalog")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true)
+    .not("embedding", "is", null);
+
+  if (embedErr) {
+    console.error(
+      `❌ Could not count embedded rows: ${embedErr.message}`
+    );
+    process.exit(1);
+  }
+  const withEmbeddingCount = embeddedCount ?? 0;
 
   const failures: string[] = [];
 
@@ -168,10 +189,10 @@ async function main() {
   }
 
   // ─── Gate 5: embedding coverage ───
-  const withEmbedding = rows.filter(
-    (r) => Array.isArray(r.embedding) && r.embedding.length > 0
-  ).length;
-  const embedPct = rows.length === 0 ? 0 : withEmbedding / rows.length;
+  // Counts come from the server-side `head: true` count above, which
+  // queries `embedding IS NOT NULL` directly in Postgres rather than
+  // round-tripping the vector through PostgREST.
+  const embedPct = rows.length === 0 ? 0 : withEmbeddingCount / rows.length;
   if (embedPct < MIN_EMBEDDING_COVERAGE) {
     failures.push(
       `Embedding coverage: ${(embedPct * 100).toFixed(1)}% rows have embeddings ` +
