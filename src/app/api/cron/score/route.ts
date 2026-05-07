@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scoreArticles } from "@/lib/pipeline/scorer";
 import { PROMPT_VERSION } from "@/lib/ai/router";
-import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
+import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 120;
 
@@ -37,11 +37,25 @@ export async function GET(request: Request) {
   const userId = resolveUserId(request);
   const prefs = await loadPrefs(supabase, userId);
 
-  const { data: run } = await supabase
+  // SYSTEM_USER_ID → null in audit row (FK to auth.users). See ingest/route.ts.
+  const auditUserId = userId === SYSTEM_USER_ID ? null : userId;
+
+  // Audit row is mandatory (dormant-pipeline contract; VIBE Rule 52).
+  const { data: run, error: runErr } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "score", status: "running", user_id: userId })
+    .insert({ step_name: "score", status: "running", user_id: auditUserId })
     .select("id")
     .single();
+
+  if (runErr || !run?.id) {
+    console.error(
+      `[score] pipeline_runs insert failed for user=${userId.slice(0, 8)}: ${runErr?.message ?? "no row returned"}`
+    );
+    return NextResponse.json(
+      { error: "audit_write_failed", step: "score", detail: runErr?.message ?? "no row returned" },
+      { status: 400 }
+    );
+  }
 
   try {
     // Lookback window is per-user (score_lookback_minutes). Default 240min.

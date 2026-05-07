@@ -102,11 +102,25 @@ export async function GET(request: Request) {
   const userId = resolveUserId(request);
   const prefs = await loadPrefs(supabase, userId);
 
-  const { data: run } = await supabase
+  // SYSTEM_USER_ID → null in audit row (FK to auth.users). See ingest/route.ts.
+  const auditUserId = userId === SYSTEM_USER_ID ? null : userId;
+
+  // Audit row is mandatory (dormant-pipeline contract; VIBE Rule 52).
+  const { data: run, error: runErr } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "deliver", status: "running", user_id: userId })
+    .insert({ step_name: "deliver", status: "running", user_id: auditUserId })
     .select("id")
     .single();
+
+  if (runErr || !run?.id) {
+    console.error(
+      `[deliver] pipeline_runs insert failed for user=${userId.slice(0, 8)}: ${runErr?.message ?? "no row returned"}`
+    );
+    return NextResponse.json(
+      { error: "audit_write_failed", step: "deliver", detail: runErr?.message ?? "no row returned" },
+      { status: 400 }
+    );
+  }
 
   try {
     // Briefs ready to deliver for this user: summary_html generated AND not

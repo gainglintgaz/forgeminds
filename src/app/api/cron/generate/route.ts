@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { routeAIRequest, PROMPT_VERSION } from "@/lib/ai/router";
-import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
+import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 120;
 
@@ -95,11 +95,25 @@ export async function GET(request: Request) {
   const userId = resolveUserId(request);
   const prefs = await loadPrefs(supabase, userId);
 
-  const { data: run } = await supabase
+  // SYSTEM_USER_ID → null in audit row (FK to auth.users). See ingest/route.ts.
+  const auditUserId = userId === SYSTEM_USER_ID ? null : userId;
+
+  // Audit row is mandatory (dormant-pipeline contract; VIBE Rule 52).
+  const { data: run, error: runErr } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "generate", status: "running", user_id: userId })
+    .insert({ step_name: "generate", status: "running", user_id: auditUserId })
     .select("id")
     .single();
+
+  if (runErr || !run?.id) {
+    console.error(
+      `[generate] pipeline_runs insert failed for user=${userId.slice(0, 8)}: ${runErr?.message ?? "no row returned"}`
+    );
+    return NextResponse.json(
+      { error: "audit_write_failed", step: "generate", detail: runErr?.message ?? "no row returned" },
+      { status: 400 }
+    );
+  }
 
   try {
     // Find this user's briefs that need a summary generated, scoped to "today"

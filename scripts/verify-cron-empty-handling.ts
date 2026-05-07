@@ -28,6 +28,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { randomUUID } from "crypto";
 
 function loadEnvLocal() {
   try {
@@ -61,12 +62,45 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-// A UUID that is guaranteed to have no rows in any table — random per run.
-// We deliberately do NOT use SYSTEM_USER_ID (some tables may have data there
-// from earlier dev runs). A fresh-each-run UUID guarantees the empty case.
-function freshUuid(): string {
-  // RFC4122-v4-ish — sufficient for "guaranteed no row exists"
-  return "00000000-0000-4000-8000-" + Date.now().toString(16).padStart(12, "0");
+// Create a real auth.users row for this test, run the 6 routes against it,
+// then delete it — the FK pipeline_runs.user_id → auth.users(id) is
+// ON DELETE CASCADE so deleting the test user auto-drops their pipeline_runs.
+//
+// Why a real user instead of a fabricated UUID: pipeline_runs.user_id has a
+// FK to auth.users; an INSERT with a UUID that doesn't match a real user
+// fails with PostgreSQL error 23503 (FK violation). Pre-2026-05-07 the
+// script used a fabricated UUID and the routes silently swallowed the
+// resulting error, so the gate appeared to fail "no audit row written"
+// when in reality the audit row was rejected at insert. Routes were also
+// patched (same date) to surface the INSERT error instead of silently
+// proceeding (VIBE Rule 52).
+async function createTestUser(): Promise<{ userId: string; email: string }> {
+  const email = `verify-cron-${Date.now()}@forgeminds.test`;
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password: randomUUID(),
+    email_confirm: true,
+  });
+  if (error || !data?.user?.id) {
+    throw new Error(
+      `Could not create test auth user: ${error?.message ?? "no user returned"}. ` +
+        `verify-cron-empty-handling needs a real auth.users row because pipeline_runs.user_id ` +
+        `has a FK to auth.users.`
+    );
+  }
+  return { userId: data.user.id, email };
+}
+
+async function deleteTestUser(userId: string): Promise<void> {
+  const { error } = await supabase.auth.admin.deleteUser(userId);
+  if (error) {
+    console.warn(
+      `⚠ Could not delete test user ${userId.slice(0, 8)}…: ${error.message}`
+    );
+    console.warn(
+      `   Manual cleanup: select auth.uid() = '${userId}' rows from any FK-pointing table and delete the auth.users row.`
+    );
+  }
 }
 
 const ROUTES = ["ingest", "score", "curate", "enrich", "generate", "deliver"] as const;
@@ -167,31 +201,36 @@ async function main() {
   console.log(`   BASE_URL: ${BASE_URL}`);
   console.log("");
 
-  const userId = freshUuid();
-  console.log(`   Synthetic user_id (guaranteed no rows): ${userId}`);
+  const { userId, email } = await createTestUser();
+  console.log(`   Created test auth user ${userId} (${email})`);
+  console.log("   This user has no sources/articles/briefs — the empty case.");
   console.log("");
 
+  let totalBlockers = 0;
   const results: RouteResult[] = [];
-  for (const step of ROUTES) {
-    process.stdout.write(`   ▶ ${step.padEnd(10)} `);
-    const r = await checkRoute(step, userId);
-    results.push(r);
-    if (r.blockers.length === 0) {
-      console.log(`✓ HTTP ${r.http_status}, run=${r.pipeline_run_status}, items=${r.pipeline_run_items_processed}`);
-    } else {
-      console.log(`✗ ${r.blockers.length} blocker(s)`);
-      for (const b of r.blockers) console.log(`        - ${b}`);
+  try {
+    for (const step of ROUTES) {
+      process.stdout.write(`   ▶ ${step.padEnd(10)} `);
+      const r = await checkRoute(step, userId);
+      results.push(r);
+      if (r.blockers.length === 0) {
+        console.log(`✓ HTTP ${r.http_status}, run=${r.pipeline_run_status}, items=${r.pipeline_run_items_processed}`);
+      } else {
+        console.log(`✗ ${r.blockers.length} blocker(s)`);
+        for (const b of r.blockers) console.log(`        - ${b}`);
+      }
     }
+
+    totalBlockers = results.reduce((acc, r) => acc + r.blockers.length, 0);
+  } finally {
+    // Always clean up — even if checkRoute throws — so test users don't
+    // accumulate. Cascade deletes pipeline_runs rows automatically.
+    await deleteTestUser(userId);
+    console.log("");
+    console.log(`   Cleaned up test user ${userId.slice(0, 8)}… (cascade dropped pipeline_runs rows)`);
   }
 
-  // Cleanup synthetic pipeline_runs rows (don't pollute history)
-  await supabase
-    .from("pipeline_runs")
-    .delete()
-    .eq("user_id", userId);
-
   console.log("");
-  const totalBlockers = results.reduce((acc, r) => acc + r.blockers.length, 0);
   if (totalBlockers === 0) {
     console.log(`✅ verify-cron-empty-handling: ${ROUTES.length}/${ROUTES.length} routes handle empty case correctly`);
     return;
@@ -199,7 +238,7 @@ async function main() {
 
   console.log(`❌ verify-cron-empty-handling: ${totalBlockers} blocker(s) across ${results.filter((r) => r.blockers.length > 0).length} route(s)`);
   console.log("");
-  console.log("   Each cron route must, when invoked for a user with zero sources/articles/briefs:");
+  console.log("   Each cron route must, when invoked for a real user with zero sources/articles/briefs:");
   console.log("     1. Return HTTP 200 (not 401, 404, 500)");
   console.log("     2. Have no error in response body");
   console.log("     3. Write pipeline_runs row with status='completed' and items_processed=0");

@@ -7,7 +7,7 @@ import { fetchAlpacaNews } from "@/lib/pipeline/ingest/alpaca";
 import { fetchAlphaVantageNews } from "@/lib/pipeline/ingest/alpha-vantage";
 import { deduplicateArticles, generateContentHash } from "@/lib/ai/heuristics/dedup";
 import { filterRecent } from "@/lib/ai/heuristics/recency";
-import { resolveUserId, loadPrefs } from "@/lib/pipeline/user-prefs";
+import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 import type { RawArticle, FetchResult } from "@/lib/types/articles";
 
 export const maxDuration = 120;
@@ -30,12 +30,36 @@ export async function GET(request: Request) {
   const userId = resolveUserId(request);
   const prefs = await loadPrefs(supabase, userId);
 
-  // Log pipeline run start.
-  const { data: run } = await supabase
+  // pipeline_runs.user_id is FK to auth.users. SYSTEM_USER_ID is a
+  // sentinel ("no real user — manual curl / verify probe / system run"),
+  // not an actual auth.users row, so writing it to the FK column would
+  // violate the constraint. The column is nullable specifically for this
+  // case — system runs write NULL user_id. Real cron dispatcher invocations
+  // pass ?user_id=<real-uuid> and write that as-is.
+  const auditUserId = userId === SYSTEM_USER_ID ? null : userId;
+
+  // Log pipeline run start. Every cron tick MUST write its audit row
+  // (DECISIONS.md 2026-05-04 dormant-pipeline contract). If the INSERT
+  // fails — FK violation against auth.users, RLS denial, schema drift —
+  // surface immediately rather than silently proceeding without
+  // observability. VIBE Rule 52 (no silent failures).
+  const { data: run, error: runErr } = await supabase
     .from("pipeline_runs")
-    .insert({ step_name: "ingest", status: "running", user_id: userId })
+    .insert({ step_name: "ingest", status: "running", user_id: auditUserId })
     .select("id")
     .single();
+
+  if (runErr || !run?.id) {
+    console.error(
+      `[ingest] pipeline_runs insert failed for user=${userId.slice(0, 8)}: ${runErr?.message ?? "no row returned"}`
+    );
+    // 400 not 500 — FK / config errors aren't retryable; cron retrying
+    // would just burn quota on the same failure.
+    return NextResponse.json(
+      { error: "audit_write_failed", step: "ingest", detail: runErr?.message ?? "no row returned" },
+      { status: 400 }
+    );
+  }
 
   try {
     // Read this user's active sources, grouped by type. Per-user-from-day-1
