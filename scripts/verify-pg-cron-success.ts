@@ -127,13 +127,11 @@ async function main() {
 
   let totalRuns = 0;
   let totalSucceeded = 0;
-  let totalFailed = 0;
   const failedSamples: string[] = [];
 
   for (const s of stats) {
     totalRuns += s.total;
     totalSucceeded += s.succeeded;
-    totalFailed += s.failed;
     const pct = s.total === 0 ? 0 : (s.succeeded / s.total) * 100;
     const marker = s.failed === 0 ? "✓" : "✗";
     console.log(
