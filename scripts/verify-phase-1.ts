@@ -19,7 +19,13 @@
  *   9. verify:cron-empty-handling (each route handles zero-source users
  *                                  cleanly — pipeline_runs.status='completed',
  *                                  items_processed=0, no errors)
- *  10. e2e (playwright)          (auth + dashboard + sources + briefs flows)
+ *  10. verify:pg-cron-success    (≥95% of pg_cron dispatcher runs in
+ *                                  last 30min have status='succeeded' —
+ *                                  catches PL/pgSQL crashes invisible to
+ *                                  pipeline_runs. Added 2026-05-12 after
+ *                                  vault.read_secret bug went undetected
+ *                                  for 5 days.)
+ *  11. e2e (playwright)          (auth + dashboard + sources + briefs flows)
  *
  * NOT run anymore: verify:pipeline-flow (audit Blocker 3 — that gate
  * asserted ≥1 row in raw_articles/scored_articles/briefs in last 24h,
@@ -58,6 +64,7 @@ const STEPS: Step[] = [
     : [
         { name: "verify:cron-routes", cmd: "npx", args: ["tsx", "scripts/verify-cron-routes.ts"] } as Step,
         { name: "verify:cron-empty-handling", cmd: "npx", args: ["tsx", "scripts/verify-cron-empty-handling.ts"] } as Step,
+        { name: "verify:pg-cron-success", cmd: "npx", args: ["tsx", "scripts/verify-pg-cron-success.ts"] } as Step,
       ]),
   ...(SKIP_E2E
     ? []
