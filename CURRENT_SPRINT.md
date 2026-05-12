@@ -1,9 +1,31 @@
 # ForgeMinds — Current Sprint
 
-## Phase 1.5: AI-Assisted Source Discovery (CURRENT — skeleton built, awaits Phase 1 close)
-**Status:** Infrastructure complete; catalog seed + dev migration apply pending
+## Phase 1.5: AI-Assisted Source Discovery (CURRENT — Phase 1 CLOSED, catalog ~33% to target)
+**Status:** Phase 1 closed 2026-05-12 (ab471e0); Phase 1.5 catalog seeded 67/200 sources, 5/10 categories
 **Started:** 2026-05-05 (overnight autonomous build, parallel with Phase 1 close)
-**Last update:** 2026-05-05
+**Last update:** 2026-05-24
+
+### Where we are right now (post-2026-05-24 session)
+
+**Catalog state (MCP-verified):**
+- 67 rows total, 100% embedded
+- 5 categories: medicine, finance, tech, sciences, geopolitics
+- 17 subcategories
+- Median quality 0.880 (target ≥0.65 ✓)
+- 88% free or freemium (target ≥50% ✓)
+
+**Phase 1.5 close still needs ~3-4 more sessions of curator dispatches:**
+- ~133 more rows (target ≥200)
+- ~5 more categories (target ≥10: education, arts, lifestyle, sports, civic, etc per VECTORS.md)
+- Then: real onboarding round-trip smoke + cost audit (currently blocked on Anthropic key) + verify:phase-1-5 + close commit
+
+**Recommended next 4 curator batches (parallel dispatch, foreground only):**
+1. `education / edtech` — Khan Academy, EdSurge, Inside Higher Ed, Hechinger, Substack edtech
+2. `arts / literature` — NYRB, LARB, Paris Review, Lit Hub, Substack literary
+3. `sports / strategy` — The Athletic, ESPN xG, FiveThirtyEight sports, RotoWire
+4. `lifestyle / longevity` — Peter Attia, Huberman, Outlive newsletter, podcast feeds
+
+After those 4: ~120 rows, 9 categories. One more wave (5 categories × 10 sources = 50 rows) to clear Phase 1.5 gate.
 
 **What "skeleton built" means:** Every Phase 1.5 file/route/component exists, type-checks clean, lints clean, and passes the pre-commit gates. Catalog seeding via the `source-catalog-curator` subagent + dev DB migration apply happen in dedicated Phase 1.5 sessions. Those are the only remaining gates between skeleton and ship.
 

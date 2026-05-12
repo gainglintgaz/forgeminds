@@ -464,3 +464,89 @@ Until then it's BYOS-only or LOCKED. Costs ForgeMinds $0 to support.
 - Region label "PRODUCTION" in Supabase dashboard is the default for non-branch projects; ForgeMinds has zero public traffic so functionally still dev. Factory CLAUDE.md §5 production-data-protection rules apply once real user data lands here, not before.
 - Plugin Supabase MCP routing fight (Claude Code dedupes `mcp.supabase.com/mcp` URLs) blocked MCP automation; SQL editor paste path used as fallback. Documented for future reference.
 
+---
+
+## 2026-05-12 — Husky hooks split: AUDIT GATE check moved from pre-commit to commit-msg
+
+**Decision:** Split the husky hook into two files:
+- `.husky/pre-commit` — runs tsc, eslint, verify:columns on staged pipeline/api files, secret-pattern grep
+- `.husky/commit-msg` — runs the AUDIT GATE wording check + PHASE AUDIT block check + audit file existence check
+
+**Why:** Pre-commit hooks do NOT receive the commit message file as `$1` — only commit-msg hooks do. The previous setup used `${1:-$(git rev-parse --git-dir)/COMMIT_EDITMSG}` which fell back to a stale `.git/COMMIT_EDITMSG` from the previous commit. Result: the entire VIBE Rule 35 mechanical enforcement story was decorative since installation. Every "feat: dashboard complete" commit slipped through.
+
+**Discovered:** P1.0-E test — `git commit --allow-empty -m "feat: dashboard complete"` succeeded silently when it should have been rejected.
+
+**Reference:** commit `74ec301` (the split + rejection test verified). Lesson: hooks need to be wired to the right git lifecycle event, not just "any hook that has access to the message."
+
+---
+
+## 2026-05-12 — pg_cron dispatcher hotfix: vault.decrypted_secrets view, not vault.read_secret()
+
+**Decision:** Replace `vault.read_secret('cron_secret')` in `private.invoke_forgeminds_cron()` with a SELECT from `vault.decrypted_secrets WHERE name = 'cron_secret'`.
+
+**Why:** Supabase's vault extension does NOT provide a `vault.read_secret(text)` function. The function call had been present in migration `20260501000001` since Phase 1 bootstrap; ~71% of pg_cron dispatcher runs had been failing silently with `function vault.read_secret(unknown) does not exist` for 5 days before discovery. The 29% that "succeeded" were ticks where 0 users matched the dispatcher's schedule filter (loop body never reached the vault call).
+
+**Discovered:** P1.0-G — querying `cron.job_run_details` for the first time during Phase 1 close audit.
+
+**Lesson:** pipeline_runs audit rows only capture failures that happen AFTER the HTTP layer is reached. PL/pgSQL crashes BEFORE that point are invisible to pipeline_runs and visible only via `cron.job_run_details`. New gate `verify:pg-cron-success` (commit `5294825`) closes this observability gap — asserts ≥95% success rate on the last 10 runs per dispatcher job, surfaces failure messages.
+
+**Reference:** commits `5294825`, `e8a413c` (eslint cleanup); migrations `20260512000000_fix_vault_read_secret.sql` + `20260512000001_forgeminds_pg_cron_stats.sql`.
+
+---
+
+## 2026-05-12 — Central model registry; grok-3 retirement migration
+
+**Decision:** New file `src/lib/ai/models.ts` centralizes all AI model pins + cost constants. All 5 providers (grok, claude, gemini, openai, perplexity) read from it. Embedding model is intentionally NOT env-overridable (vector(1536) column is a column-level commitment). Other models accept env-var override for emergency rollback without redeploy.
+
+**Why:** xAI announced grok-3 family retirement on 2026-05-15. Previously the model pin lived in `src/lib/ai/providers/grok.ts` as `const GROK_MODEL = "grok-3-mini-fast"`. Migrating that one line required redeploying. Now it's a single registry edit (or an env var bump in Vercel for emergency rollback).
+
+**Migrations included in the refactor commit:**
+- `grok-3-mini-fast` → `grok-4.3-latest` (xAI's `-latest` alias auto-rolls)
+- `claude-sonnet-4-20250514` → `claude-sonnet-4-6` (global VictorForge CLAUDE.md guidance; latest Sonnet)
+- Claude Haiku, Gemini, OpenAI embed, Perplexity unchanged
+
+**Reference:** commit `420a6d5`.
+
+---
+
+## 2026-05-24 — Phase 1 closure + ~33% Phase 1.5 catalog seeded
+
+**Decision:** Phase 1 declared complete (commit `ab471e0`) with all 11 mechanical verify:phase-1 gates green: tsc, lint, db, columns, rls, honest-strings, env-vars, cron-routes, cron-empty-handling, **pg-cron-success (new)**, playwright e2e.
+
+Phase 1.5 catalog seeding in progress: 4 curator subagent batches landed this session (finance/monetary_policy:15, tech/ai_ml:16, sciences/climate:11, geopolitics/global_affairs:11) on top of the original medicine/oncology:13. Total 67 rows, 5 categories, 17 subcategories, 100% embedded, median quality 0.880, 88% free-or-freemium.
+
+**Phase 1.5 close still pending ~3-4 sessions:** need ≥200 rows, ≥10 categories.
+
+**Open blocker:** Step C onboarding cost-audit (target: mean<$0.06, max<$0.10 per chat run) — blocked on stale `ANTHROPIC_API_KEY` in `.env.local`. Smoke script (`scripts/smoke-onboarding-cost.ts`, commit `d020123`) ready to run the moment the key rotates. Curator subagents this session were unaffected because they use the parent Claude Code session's Anthropic credentials, not the project's `.env.local`.
+
+**Operational finding worth logging:** Curator subagents fail when run in `run_in_background: true` mode (the background dispatch strips Bash/WebFetch tool access). Foreground dispatch only. Documented in commit `0b11fe7` body.
+
+**Reference:** commits `ab471e0` (Phase 1 close), `5294825` (dispatcher hotfix), `74ec301` (hook split), `420a6d5` (model registry), `0b11fe7` (4-batch curator), `d020123` (cost-audit smoke).
+
+---
+
+## 2026-05-24 — Karpathy/Chang Rules 58-60 promoted to factory vibe-standard.md
+
+**Decision:** Adopt 3 rules from the @Mnilax / Forrest Chang 12-rule CLAUDE.md template (the rest were already covered by existing VIBE rules or factory CLAUDE.md §4 entries):
+- Rule 58: Hard token budgets (4k task / 30k session). Surface breach, don't silently overrun.
+- Rule 59: Surface conflicts in codebase patterns, don't average them.
+- Rule 60: Read exports + immediate callers + shared utilities before adding code.
+
+Skipped from the 12-rule template: Karpathy 5 (model only for judgment calls — too domain-specific for VictorForge multi-stack rule set) and Karpathy 9 (tests verify intent — already implicit in Definition of Done).
+
+**Why:** Validated across 30 codebases over 6 weeks per Chang's repo data. Map cleanly to observed VictorForge failure modes (90-minute debugging spirals, conflicting error-handling patterns, agent-adds-duplicate-function-it-didn't-read).
+
+**Reference:** factory commit `1427644` — adds §XIII to vibe-standard.md + GP-NEXT Claude Code operational tips to golden-paths.md.
+
+---
+
+## 2026-05-24 — HTML maximalism: selective adoption, NOT broad migration of .md files
+
+**Decision:** Markdown remains the canonical format for ALL committed-to-git artifacts (rules, lessons, audits, plans, decisions, sprint files). HTML is reserved for one-off share-this-once outputs (status reports, design mockups, spec brainstorms) when explicit user-shareability matters.
+
+**Why:** The @trq212 article makes a real point — HTML beats markdown for information density (SVG diagrams, tables, interactive elements) and visual clarity (long markdown is hard to read). But the diffability cost is unacceptable for files that must live in git with clean review history. Audit files, decision logs, rule files, and lessons are read repeatedly by AI agents AND humans; HTML diff noise would destroy reviewability.
+
+**Where HTML pilot lives:** Phase audit summary cards for share-with-Victor / share-with-team contexts. Spec brainstorms during exploration. NOT in any persistent .claude/ rule file.
+
+**Reference:** triage in 2026-05-12 session response; recorded here for institutional memory.
+
