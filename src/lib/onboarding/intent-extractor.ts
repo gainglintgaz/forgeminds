@@ -64,9 +64,16 @@ export async function extractIntent(rawDescription: string): Promise<UserIntent>
     useHaiku: true,
   });
 
+  // Defensively strip markdown code fences. Claude Haiku 4.5 (and newer
+  // Sonnet builds) sometimes wrap JSON in ```json ... ``` despite the
+  // "no markdown, no code fences" instruction. Discovered 2026-05-25
+  // during Phase 1.5 cost-audit smoke — every onboarding chat returned
+  // 422 because JSON.parse choked on the fences.
+  const stripped = stripCodeFences(response.content);
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(response.content);
+    parsed = JSON.parse(stripped);
   } catch (e) {
     throw new IntentExtractionError(
       `Model returned non-JSON output: ${(e as Error).message}`,
@@ -122,4 +129,20 @@ function coerceEnum<T extends string>(value: unknown, valid: ReadonlySet<T>, fal
     return value as T;
   }
   return fallback;
+}
+
+/**
+ * Strip ```json ... ``` (or ``` ... ```) markdown code fences that
+ * Claude Haiku 4.5+ sometimes wraps JSON output in. Matches:
+ *   ```json\n{...}\n```
+ *   ```\n{...}\n```
+ *   {...}                        (passthrough; no fences)
+ *
+ * Returns the inner content (or the original string if no fences).
+ */
+function stripCodeFences(content: string): string {
+  const trimmed = content.trim();
+  // ```json or ``` at start, ``` at end
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+  return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
