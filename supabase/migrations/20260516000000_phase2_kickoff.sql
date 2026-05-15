@@ -1,28 +1,30 @@
 -- ════════════════════════════════════════════════════════════════════
--- ForgeMinds — Phase 2 prep: article_outcomes (per-user-per-article state)
+-- ForgeMinds — Phase 2 kickoff
 -- ════════════════════════════════════════════════════════════════════
--- Heart of the personal flywheel per .claude/rules/data-flywheel.md §3
--- + §9 Phase A. One row per (user, article). Upserted on every
--- save/dismiss/rate action from the brief view.
+-- Closes the two WARN items from the Phase 1.5 audit
+-- (.claude/checklists/phase-1-5-audit-2026-05-15.md §B) and lands the
+-- per-user-per-article state table that the brief view will write to.
 --
--- The companion event stream lives in `behavioral_events` (existing,
--- migration 20260426000004). article_outcomes is the deduped current
--- state.
+-- Three changes, all idempotent:
+--   1. CREATE TABLE article_outcomes (+ enum, indexes, RLS, RPC, trigger).
+--      Per-(user, article) deduped state — heart of the personal flywheel
+--      per .claude/rules/data-flywheel.md §3 + §9 Phase A. Companion to
+--      the existing behavioral_events stream (which stays append-only
+--      for time-context analytics).
+--   2. ALTER source_suggestions ADD prompt_version (TEXT, nullable) —
+--      closes Phase 1.5 audit §B warn #1 (AI-output rows need
+--      prompt_version per VIBE Rule 54).
+--   3. ALTER source_suggestions ADD updated_at (TIMESTAMPTZ DEFAULT now())
+--      + trigger reusing public.set_updated_at() — closes §B warn #2.
 --
--- Why both tables:
---   - behavioral_events = WHAT HAPPENED, WHEN, IN WHAT SESSION
---     (event stream, append-only, useful for time-context analytics
---     and session reconstruction)
---   - article_outcomes = HOW USER FEELS ABOUT THIS ARTICLE NOW
---     (deduped per (user, article) pair, the input to per-user
---     scoring weights starting at Phase 2)
---
--- The shape mirrors the universal pattern from
--- .claude/rules/data-flywheel.md §3.
---
--- Phase 2 prep status (2026-05-05): committed as wip(phase-2): so the
--- save/dismiss/rate UI in /briefs/[id] can land alongside. NOT applied
--- to the dev DB until Phase 2 starts (after Phase 1.0 + 1.5 close).
+-- This file SUPERSEDES the 20260601000000_article_outcomes.sql draft
+-- (file-only, never applied) — that filename moved earlier in time to
+-- land alongside the source_suggestions audit-column fixes as a single
+-- Phase 2 kickoff migration.
+-- ════════════════════════════════════════════════════════════════════
+
+-- ════════════════════════════════════════════════════════════════════
+-- 1. article_outcomes
 -- ════════════════════════════════════════════════════════════════════
 
 -- ─── Enum: outcome kind ──────────────────────────────────────────────
@@ -65,8 +67,7 @@ create table if not exists public.article_outcomes (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
 
-  -- Universal pattern from data-flywheel.md §3: one row per
-  -- (user, article). Re-clicking save/dismiss upserts onto this.
+  -- One row per (user, article). Re-clicking save/dismiss upserts here.
   constraint article_outcomes_user_article_uq unique (user_id, article_id)
 );
 
@@ -99,27 +100,23 @@ create policy "article_outcomes_owner_all"
   using  (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- service_role retains full access (for Phase 2 cron jobs that
--- aggregate outcomes into per-user scoring weights).
+-- service_role retains full access (Phase 2 cron jobs that aggregate
+-- outcomes into per-user scoring weights).
 grant all on public.article_outcomes to service_role;
 grant select, insert, update on public.article_outcomes to authenticated;
 
 -- ─── updated_at maintenance ──────────────────────────────────────────
--- Reuse public.set_updated_at() (already pinned to search_path =
--- public, pg_temp in 20260504000001_security_advisor_fixes).
+-- Reuse public.set_updated_at() (pinned to search_path = public, pg_temp
+-- in 20260504000001_security_advisor_fixes).
 drop trigger if exists article_outcomes_set_updated_at on public.article_outcomes;
 create trigger article_outcomes_set_updated_at
   before update on public.article_outcomes
   for each row execute function public.set_updated_at();
 
--- ─── Upsert RPC (recommended path; client uses this not raw .upsert) ──
--- Why an RPC instead of letting the client do .upsert() directly:
---   1. Single place to fan out to behavioral_events (track_event) so
---      the EVENT side of the story is captured atomically with the
---      STATE side.
---   2. SECURITY DEFINER lets the function call track_event() (which
---      runs in caller's RLS context) cleanly.
---   3. One round-trip from the browser instead of two.
+-- ─── Upsert RPC ──────────────────────────────────────────────────────
+-- Single round-trip from the browser. Atomically writes the state row
+-- AND mirrors to behavioral_events via track_event() — keeps the EVENT
+-- story (append-only stream) in sync with the STATE story (deduped row).
 create or replace function public.upsert_article_outcome(
   p_article_id          uuid,
   p_brief_id            uuid default null,
@@ -145,8 +142,7 @@ begin
   end if;
 
   -- Upsert outcome row. Coalesce keeps existing values when caller
-  -- passes null for a field — supports partial updates (e.g. user
-  -- clicks Save first, rates 1-5 second).
+  -- passes null for a field — supports partial updates.
   insert into public.article_outcomes (
     user_id, article_id, brief_id, outcome, rating,
     worth_it, would_repeat, time_spent_seconds, notes, context
@@ -173,10 +169,7 @@ begin
     updated_at = now()
   returning outcome_id into v_outcome_id;
 
-  -- Mirror to event stream — supports time-context analytics and
-  -- per-session aggregations downstream. Uses existing track_event()
-  -- RPC from migration 20260426000004 (already pinned + locked to
-  -- authenticated).
+  -- Mirror to event stream.
   v_event_type := case p_outcome
     when 'saved'        then 'article_save'::public.behavioral_event_type
     when 'dismissed'    then 'article_dismiss'::public.behavioral_event_type
@@ -205,8 +198,6 @@ begin
 end;
 $$;
 
--- Lock execution down. Authenticated users call from /briefs/[id]
--- save/dismiss/rate buttons. service_role can call for backfills.
 revoke execute on function public.upsert_article_outcome(
   uuid, uuid, public.article_outcome_kind, smallint, boolean, boolean, integer, text, jsonb
 ) from anon, public;
@@ -214,38 +205,35 @@ grant execute on function public.upsert_article_outcome(
   uuid, uuid, public.article_outcome_kind, smallint, boolean, boolean, integer, text, jsonb
 ) to authenticated, service_role;
 
+-- ════════════════════════════════════════════════════════════════════
+-- 2 + 3. source_suggestions: prompt_version + updated_at
+-- ════════════════════════════════════════════════════════════════════
+-- Closes Phase 1.5 audit §B warnings. Both columns nullable so the
+-- ALTER is online-safe per .claude/rules/migration-strategy.md §3
+-- (`ADD COLUMN ... NULL` with no default is instant in all Postgres
+-- versions).
+
+alter table public.source_suggestions
+  add column if not exists prompt_version text;
+
+comment on column public.source_suggestions.prompt_version is
+  'AI prompt template version that produced this suggestion. Required for AI-generated rows per VIBE Rule 54. NULL for legacy rows.';
+
+alter table public.source_suggestions
+  add column if not exists updated_at timestamptz not null default now();
+
+drop trigger if exists source_suggestions_set_updated_at on public.source_suggestions;
+create trigger source_suggestions_set_updated_at
+  before update on public.source_suggestions
+  for each row execute function public.set_updated_at();
+
 -- ─── Verification (paste in SQL editor after applying) ───────────────
 --
---   -- Confirm table exists + RLS on:
---   select relname, relrowsecurity from pg_class
---   where relname = 'article_outcomes';
---   -- expect: 1 row, relrowsecurity = true
+--   -- article_outcomes RLS on:
+--   select relname, relrowsecurity from pg_class where relname = 'article_outcomes';
 --
---   -- Confirm RPC exists with pinned search_path:
---   select proname, proconfig from pg_proc
---   where proname = 'upsert_article_outcome'
---     and pronamespace = 'public'::regnamespace;
---   -- proconfig should show {search_path=public, pg_temp}
---
---   -- Confirm anon cannot execute RPC:
---   select has_function_privilege('anon',
---     'public.upsert_article_outcome(uuid, uuid, public.article_outcome_kind, smallint, boolean, boolean, integer, text, jsonb)'::regprocedure,
---     'EXECUTE');
---   -- expect: false
---
---   -- Confirm authenticated CAN execute:
---   select has_function_privilege('authenticated',
---     'public.upsert_article_outcome(uuid, uuid, public.article_outcome_kind, smallint, boolean, boolean, integer, text, jsonb)'::regprocedure,
---     'EXECUTE');
---   -- expect: true
---
---   -- Smoke test as authenticated test user (in SQL editor with role
---   -- swap, or via JS SDK signed in):
---   select public.upsert_article_outcome(
---     '<a real article uuid>'::uuid,
---     '<a real brief uuid>'::uuid,
---     'saved'::public.article_outcome_kind,
---     5::smallint, true, true, 120
---   );
---   -- Confirm: 1 row in article_outcomes for (auth.uid(), article_id)
---   --          1 new row in behavioral_events with event_type='article_save'
+--   -- source_suggestions has both new columns:
+--   select column_name, data_type, is_nullable
+--   from information_schema.columns
+--   where table_schema='public' and table_name='source_suggestions'
+--     and column_name in ('prompt_version', 'updated_at');

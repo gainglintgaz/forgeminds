@@ -466,7 +466,7 @@ const ALWAYS_OK = new Set(["*", "count", "exact", "head"]);
 const PENDING_MIGRATION_TABLES = new Set<string>([
   // 20260510000000_source_catalog.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
   // 20260510000001_source_suggestions.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
-  "article_outcomes",    // 20260601000000_article_outcomes.sql (Phase 2 prep — not applied yet)
+  // 20260516000000_phase2_kickoff.sql — APPLIED 2026-05-15 (article_outcomes + source_suggestions audit cols)
 ]);
 
 async function main() {
