@@ -550,3 +550,65 @@ Skipped from the 12-rule template: Karpathy 5 (model only for judgment calls —
 
 **Reference:** triage in 2026-05-12 session response; recorded here for institutional memory.
 
+
+---
+
+## 2026-06-06 — Project PARKED for v4.3 / v5.0 harvest
+
+**Decision:** Park ForgeMinds at current Phase 1.5 state (~33% of close target; 67 sources / 5 categories / 9 SQL seed files). Patterns harvested into `.claude/v4.3-harvest.md` for promotion to the v4.3 saas-multi-tenant vertical pack and as the foundation of v5.0 commercial VictorForge.
+
+**Why park instead of finish:**
+
+The remaining Phase 1.5 close work (5 more curator batches + smoke + close commit) is execution, not learning. Every architectural pattern that ForgeMinds was meant to prove has already been proved:
+
+- Per-user-from-day-1 (VIBE Rule 55) — proved via `user_preferences` 11-column schema + dispatcher reading it
+- AI-Assisted Discovery over forms (VIBE Rule 56) — proved via the conversational onboarding agent (cost-audit PASSED 2026-05-24)
+- Dispatcher pattern cron — proved via `private.dispatch_forgeminds_cron` running for 25+ days
+- Per-user-source-aware fetcher gating — proved via `/api/cron/ingest` refactor + verify:cron-empty-handling
+- AI-at-the-Core architecture (VIBE Rule 57) — proved via the 5-question audit in `AI_FIRST_AUDIT.md`
+- Source catalog + curator + validator triad — proved via the 67-source seeded catalog + 9 SQL files passing advisor scan clean
+
+The patterns are ready to ship into v4.3 + v5.0. ForgeMinds-the-product can resume later if there's demand, but the harvest doc captures the gold and the codebase remains a reference implementation.
+
+**What's preserved:**
+- All migrations (file-level + applied to `ymgbjtgczgnooscigplb`)
+- Onboarding wizard skeleton + AI provider router
+- 67-row source_catalog (live in dev DB, embedded, advisor-clean)
+- All factory rules (auto-loaded via `.claude/rules/`)
+- Phase 2 prep (article_outcomes migration committed, file-only)
+
+**What stops:**
+- Catalog seeding via curator subagent (remaining 5+ batches)
+- Real onboarding round-trip smoke test
+- `verify:phase-1-5` final gate
+- `feat: phase 1.5 complete` close commit
+- Phase 2 spec work (per-user scoring engine)
+- Phase 3-10 (action engine, brain, voice DNA, trust escalation, build kickoff, community brain, agents, multi-user SaaS productization)
+
+**Outputs of this park:**
+- `.claude/v4.3-harvest.md` — 12-section pattern extraction
+- `CURRENT_SPRINT.md` updated with PARKED banner + pre-park snapshot
+- This DECISIONS.md entry
+- AGENTS.md / .cursor/rules/*.mdc / GEMINI.md / .windsurfrules / PERPLEXITY_SPACE_INSTRUCTIONS.md regenerated via sync-rules-to-platforms.ps1 (cross-tool rule mirrors)
+- 14 factory rule files refreshed into `.claude/rules/` (reflects v4.2 of the factory)
+
+**[FACTORY-CHANGE-CANDIDATE] items surfaced:** 10 items, see `.claude/v4.3-harvest.md` §12. The two most actionable:
+- Promote `source-catalog-curator.md` + `source-validator.md` from project-level to factory `.claude/agents/`
+- Fix the em-dash parse error in `scripts/onboard-existing-project.ps1` (PowerShell 5.1 chokes on Unicode — see factory CLAUDE.md §10)
+
+**Resumption gate:** any future un-park requires reading `HANDOFF_2026-05-06.md` + this entry + the v4.3-harvest doc. The kickoff prompt in the handoff file is still the right entry point.
+
+---
+
+## 2026-06-07 — Project un-parked; catalog corrected to 116 rows / 9 categories
+
+**Decision:** Resume Phase 1.5 close. Parking entry (2026-06-06) incorrectly logged "67 sources / 5 categories" — it used the pre-`e2b46b8` snapshot. Commit `e2b46b8` ("4 more curator batches + Haiku JSON-fence fix + cost-audit PASS") had already added education/edtech, arts/literature, sports/strategy, lifestyle/longevity before parking. Corrected state: **116 rows, 9 categories, 100% embedded**.
+
+**ANTHROPIC_API_KEY status:** Rotated and verified valid (HTTP 200 from api.anthropic.com, key prefix `sk-ant-api03`, length 108). Was stale between 2026-05-06 and 2026-06-07. Smoke test (`scripts/smoke-onboarding-cost.ts`, commit `d020123`) is now unblocked.
+
+**Updated Phase 1.5 close sequence:**
+1. B (onboarding smoke) first — unblocked, ~10 min, validates full loop before more catalog investment
+2. A (4 curator batches, foreground-only) — civic/local_govt, health/preventive, career/job_search, legal_tax/personal → ~50-60 more rows → crosses ≥200 + ≥10 categories
+3. `npm run verify:phase-1-5` → `feat: phase 1.5 complete` close commit
+
+**Why B before A:** if the smoke test surfaces a broken onboarding flow (route bug, cost-cap misconfiguration, provider error), better to find that before seeding more catalog rows that feed a broken pipe. B is the cheapest gate to run first.

@@ -1,9 +1,36 @@
 # ForgeMinds — Current Sprint
 
-## Phase 1.5: AI-Assisted Source Discovery (CURRENT — Phase 1 CLOSED, catalog ~33% to target)
-**Status:** Phase 1 closed 2026-05-12 (ab471e0); Phase 1.5 catalog seeded 67/200 sources, 5/10 categories
+## 🟢 PROJECT ACTIVE — Un-parked 2026-06-07 (Phase 1.5 ~58% complete)
+
+**Corrected catalog state (commit e2b46b8 had 4 more batches; parking entry incorrectly used pre-batch numbers):**
+- Phase 0: CLOSED (commit d09300a)
+- Phase 1: CLOSED 2026-05-12 (commit ab471e0)
+- Phase 1.5: ~58% of close target
+  - Catalog: **116 rows**, 100% embedded, **9 categories** (medicine, finance, tech, sciences, geopolitics, education, arts, sports, lifestyle), median quality 0.88, 88% free/freemium
+  - Skeleton: 100% — every Phase 1.5 file/route/component exists + passes pre-commit gates
+  - Cost-audit: PASSED 2026-05-24 (commit e2b46b8)
+  - ANTHROPIC_API_KEY: **verified valid 2026-06-07** (was stale in parking entry; now rotated)
+  - Still needed: ~84 more rows / ~1 more category / onboarding smoke test (UNBLOCKED) / verify:phase-1-5 / close commit
+- Phase 2 prep: DRAFTED (commit dbafdbf — file-only)
+
+**Harvest output still valid:** see `.claude/v4.3-harvest.md` — patterns captured regardless of phase close status.
+
+**Active resumption sequence:**
+1. **B — Onboarding smoke test** (unblocked): `npx tsx scripts/smoke-onboarding-cost.ts` → verify mean<$0.06, max<$0.10
+2. **A — 4 curator batches** (foreground-only per 2026-05-24 op-finding): civic/local_govt, health/preventive, career/job_search, legal_tax/personal
+3. Embed backfill after each batch: `npm run embed:catalog`
+4. `npm run verify:phase-1-5` with dev server
+5. `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
+6. Then Phase 2 — apply article_outcomes migration + remove from PENDING_MIGRATION_TABLES
+
+---
+
+## Pre-park sprint state (reference only — historical)
+
+### Phase 1.5: AI-Assisted Source Discovery — last update 2026-05-24
+**Status (as of park):** Phase 1 closed 2026-05-12; Phase 1.5 catalog seeded 67/200 sources, 5/10 categories
 **Started:** 2026-05-05 (overnight autonomous build, parallel with Phase 1 close)
-**Last update:** 2026-05-24
+**Last update before park:** 2026-05-24
 
 ### Where we are right now (post-2026-05-24 session)
 
