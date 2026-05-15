@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "supabase": {
+    "supabase-forgeminds": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=ymgbjtgczgnooscigplb"
     }
