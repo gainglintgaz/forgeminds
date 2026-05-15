@@ -1,27 +1,17 @@
 # ForgeMinds — Current Sprint
 
-## 🟢 PROJECT ACTIVE — Un-parked 2026-06-07 (Phase 1.5 ~58% complete)
+## ✅ PHASE 1.5 CLOSED — 2026-05-15
 
-**Corrected catalog state (commit e2b46b8 had 4 more batches; parking entry incorrectly used pre-batch numbers):**
 - Phase 0: CLOSED (commit d09300a)
 - Phase 1: CLOSED 2026-05-12 (commit ab471e0)
-- Phase 1.5: ~58% of close target
-  - Catalog: **116 rows**, 100% embedded, **9 categories** (medicine, finance, tech, sciences, geopolitics, education, arts, sports, lifestyle), median quality 0.88, 88% free/freemium
-  - Skeleton: 100% — every Phase 1.5 file/route/component exists + passes pre-commit gates
+- Phase 1.5: **CLOSED 2026-05-15** (commit 3ee8b69) — ALL GATES PASSED
+  - Catalog: **218 rows**, 100% embedded, **13 distinct categories**, 51 subcategories, median quality 0.850
+  - Skeleton: 100% — every Phase 1.5 file/route/component exists + passes all gates
   - Cost-audit: PASSED 2026-05-24 (commit e2b46b8)
-  - ANTHROPIC_API_KEY: **verified valid 2026-06-07** (was stale in parking entry; now rotated)
-  - Still needed: ~84 more rows / ~1 more category / onboarding smoke test (UNBLOCKED) / verify:phase-1-5 / close commit
+  - verify:phase-1-5: ✅ 11/11 gates — tsc, lint, verify:db, verify:columns, verify:rls, verify:honest-strings, verify:env-vars, verify:cron-routes, verify:cron-empty-handling, verify:source-catalog, playwright e2e
 - Phase 2 prep: DRAFTED (commit dbafdbf — file-only)
 
-**Harvest output still valid:** see `.claude/v4.3-harvest.md` — patterns captured regardless of phase close status.
-
-**Active resumption sequence:**
-1. **B — Onboarding smoke test** (unblocked): `npx tsx scripts/smoke-onboarding-cost.ts` → verify mean<$0.06, max<$0.10
-2. **A — 4 curator batches** (foreground-only per 2026-05-24 op-finding): civic/local_govt, health/preventive, career/job_search, legal_tax/personal
-3. Embed backfill after each batch: `npm run embed:catalog`
-4. `npm run verify:phase-1-5` with dev server
-5. `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
-6. Then Phase 2 — apply article_outcomes migration + remove from PENDING_MIGRATION_TABLES
+**Next:** Phase 2 — apply article_outcomes migration + remove from PENDING_MIGRATION_TABLES
 
 ---
 
