@@ -52,5 +52,8 @@ WEEKLY_INSIGHTS.md
 # playwright test artifacts
 /test-results/
 /playwright-report/
+
+# alpha recruiting — private (contains real user names/contacts in time)
+docs/alpha/
 /blob-report/
 /playwright/.cache/
