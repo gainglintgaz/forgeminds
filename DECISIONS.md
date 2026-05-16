@@ -612,3 +612,78 @@ The patterns are ready to ship into v4.3 + v5.0. ForgeMinds-the-product can resu
 3. `npm run verify:phase-1-5` → `feat: phase 1.5 complete` close commit
 
 **Why B before A:** if the smoke test surfaces a broken onboarding flow (route bug, cost-cap misconfiguration, provider error), better to find that before seeding more catalog rows that feed a broken pipe. B is the cheapest gate to run first.
+
+## 2026-05-16 — Phase 2 re-scoped: pipeline plumbing → closed alpha; scorecard 51/100; target ≥70/100
+
+**Decision:** Phase 2 is no longer "wake up the ingest cron + pipeline modules end-to-end." Phase 2 is now **prove the core flywheel works on real strangers** before any more pipeline modules ship.
+
+**Trigger:** Founder push-back on "ship at 45% and call it done" tendency, followed by a structured 2026-05-16 strategic audit (Explore subagent + scorecard). The honest scorecard:
+
+| Axis | Score | Floor | Target |
+|---|---|---|---|
+| Vision clarity | 92 | 85 | 90 |
+| Architecture soundness | 88 | 80 | 88 |
+| Execution maturity | 34 | 65 | 75 |
+| Data velocity | 12 | 50 | 60 |
+| Moat defensibility | 58 | 60 | 70 |
+| Real-world readiness | ~30 | 65 | 75 |
+
+**Composite 51/100 → target ≥70/100 (with no axis below its floor) before ANY V1 ship-related decision.**
+
+**What this means concretely:**
+
+The audit revealed that ForgeMinds is "well-architected vapor" — vision and architecture are excellent (92 + 88), but execution maturity (34), data velocity (12), and real-world readiness (~30) are checkpoint-level. Every module beyond Source Catalog is designed but never stress-tested on humans who aren't Victor. The moat thesis (Voice DNA + Community Brain + outcome learning) is defensible *in theory* — zero evidence it spins on real users.
+
+The correct response is NOT to ship more pipeline modules on a foundation that hasn't been proven. It's to **gate everything downstream on a closed alpha that measures the load-bearing claim**: Voice-DNA-ranking delta on real users captures real outcomes over 4 weeks.
+
+**Three artifacts locked in this commit:**
+
+1. `GOAL.md` — the product-level "ready for the real complex world" bar. 6-axis scorecard with hard floors. 10 non-negotiable tripwires. Anti-drift commitments. Re-review triggers (append-only).
+
+2. `IDEAS_BACKLOG.md` — sequenced parking lot. T0 (now / alpha-prep), T1 (post-flywheel proof), T2 (post-moat-observable), T3 (post-paid-retention), T4 (speculative). Each item has prerequisites + unlock trigger. **No T(N+1) item picked up until T(N) proof green.**
+
+3. `CURRENT_SPRINT.md` — Phase 2 sub-phased 2.0 (this checkpoint) → 2.1 (minimum pipeline for alpha, NOT full pipeline) → 2.2 (outcome capture UI) → 2.3 (alpha-readiness polish) → 2.4 (recruiting) → 2.5 (4-week alpha run) → 2.6 (go / yellow / red light decision based on measured delta).
+
+**What gets DEFERRED out of Phase 2:**
+
+- Voice DNA in scoring (that's what 2.5 alpha tests — it stays passive during the alpha)
+- Action engine (Phase 3, gated on alpha green light)
+- Brain / dot connector (Phase 4, gated on Phase 3 + ≥1 action outcome)
+- Voice DNA full surface (Phase 5, gated on first user crossing N=10 edits)
+- Trust escalation (Phase 6, gated on action outcomes flowing)
+- Build kickoff packages (Phase 7, gated on multi-vector action user)
+- Community Brain default-on surface (Phase 8, gated on first k=5 cohort hit)
+- Agents (Phase 9, gated on Trust Ladder Loop 6+ for ≥3 users)
+- Mobile/PWA (Phase 10, gated on web week-12 retention ≥40%)
+
+**Three possible alpha outcomes (2.6 decision):**
+
+1. **Green** — ≥3 of 5 users show ≥+10 percentile-point ranking delta + ≥1 action outcome logged + ≥1 k=5 cohort hit. Composite ≥65/100. → Phase 3.
+2. **Yellow** — Partial hit, composite 55-64/100. → Phase 2b refined alpha; NOT Phase 3.
+3. **Red** — Flywheel did not spin. Composite <55/100. → Stop. Strategic pivot or wind-down. Honest founder conversation.
+
+**What this is NOT:**
+
+- NOT a vision change. Vision clarity stays 92/100 — ForgeMinds is still a multi-tenant AI-first personal intelligence OS with Voice DNA + Community Brain moat. (See `GOAL.md` §1, locked.)
+- NOT a scope cut to make alpha easier. The five §3.1 claims in GOAL.md are the actual bar; nothing relaxed.
+- NOT an admission of failure. Phases 0, 1, 1.5 are real accomplishments. The 51/100 scorecard is a *checkpoint*, not a verdict.
+
+**Anti-drift commitments (from `GOAL.md` §8):**
+
+- "Ship it, we'll iterate" — not a strategy for this product. Tax/finance/AI-action features cannot be iterated on publicly.
+- "AI will fix it later" — not a substitute for design.
+- "It's just a prototype" — over the moment a second user signs up. Multi-tenant from day 1, no exceptions.
+- "We can attorney-review later" — closed-alpha is the ONLY excuse, and this DECISIONS entry IS that excuse for the alpha window.
+- "More features = more value" — replaced by "more closed feedback loops = more value."
+
+**Cadence:** GOAL.md scorecard re-scored at every phase close, with the new reading appended to GOAL.md §2 history (append-only). IDEAS_BACKLOG.md re-reviewed quarterly: T4 items that haven't moved promote to T3 or get rejected-with-reason.
+
+**Cross-references:**
+- `GOAL.md` §§1-10 — the bar in full
+- `IDEAS_BACKLOG.md` — sequenced future moves (the "more brain, more moat" inventory)
+- `CURRENT_SPRINT.md` — the active 2.0-2.6 path
+- `AI_FIRST_AUDIT.md` (locked 2026-05-05) — the 5-question audit results that this builds on
+- `DATA_FLYWHEEL.md` (locked 2026-05-05) — the data contract this enforces
+- 2026-05-04 entry above — the AI-assisted discovery pivot that made Phase 1.5 possible; same anti-drift discipline applied at higher altitude
+
+---

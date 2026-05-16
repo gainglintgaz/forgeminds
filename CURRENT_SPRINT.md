@@ -1,258 +1,260 @@
 # ForgeMinds — Current Sprint
 
+> **Standing rule:** This file is the active path. The bar is in `GOAL.md`. The parking lot is in `IDEAS_BACKLOG.md`. The history is in `DECISIONS.md`. Don't re-litigate the bar here — point at GOAL.md if pressure builds.
+
+---
+
+## 🟢 ACTIVE PHASE — Phase 2: PROVE THE LOOP (closed alpha)
+
+**Locked:** 2026-05-16 (re-scoped from earlier "Phase 2: Pipeline End-to-End" after the 51/100 strategic audit)
+**Theme:** Stop designing. Get 3-5 real strangers using ForgeMinds for 4 weeks. Measure whether the core flywheel (outcomes → Voice DNA → ranking) actually spins on people who aren't Victor.
+**Definition of done:** All five §3.1 claims in `GOAL.md` are simultaneously true. Specifically: ≥5 external alpha users × 4 weeks × ≥10 outcomes each × measured Voice-DNA-ranking delta of ≥+10 percentile-points for at least 3 of them × at least 1 action outcome logged × at least 1 Community Brain k=5 hit.
+
+**What this is NOT:**
+- A "build the pipeline" phase. The pipeline is INFRASTRUCTURE to enable the alpha, not the goal.
+- A "more features" phase. Features lock to alpha-supporting minimum.
+- A "polish" phase. Polish is post-proof.
+
+---
+
+### Phase 2 sub-phases (gated; no skipping)
+
+#### 2.0 — Strategic checkpoint commit (this sprint)
+
+**Goal:** Lock the higher bar in artifacts so it survives pressure.
+
+- [x] `GOAL.md` written — composite scorecard 51/100, target ≥70/100 before any V1 ship-related decision
+- [x] `IDEAS_BACKLOG.md` written — sequenced T0/T1/T2/T3/T4 with explicit unlock gates
+- [x] `CURRENT_SPRINT.md` re-scoped to alpha-prove-the-loop (this file)
+- [ ] `DECISIONS.md` entry for 2026-05-16: "Phase 2 re-scoped from pipeline plumbing to closed alpha. Composite scorecard 51/100. Target ≥70/100 before V1."
+- [ ] Single strategic-checkpoint commit: `docs(phase-2): lock the bar — closed-alpha refocus + ideas backlog + scorecard 51/100`
+
+Hard gate: nothing in 2.1+ begins until 2.0 is committed.
+
+---
+
+#### 2.1 — Minimum pipeline for alpha (NOT the full pipeline)
+
+**Goal:** The thinnest possible pipeline that lets an external user receive 1 brief, capture outcomes, and contribute to Voice DNA.
+
+**Five hard requirements (no more, no less):**
+
+1. **Ingest fires for users who have sources** — `/api/cron/ingest` dispatcher pulls articles from a user's configured sources. Only invokes per-source-type fetchers the user actually has rows for. (lessons.md #98 already addressed.)
+
+2. **Scoring produces a composite_score** — Gemini Flash scores articles 0-1 against user profile + intent. NOT all 10 modules. NOT Voice DNA yet. Just baseline scoring.
+
+3. **Curation picks top N** — `max_articles_per_brief` from `user_preferences`. Density caps respected.
+
+4. **Brief generated + persisted** — One `briefs` row per cycle. HTML + plain text. Includes `prompt_version`.
+
+5. **Brief delivered to dashboard** — `/dashboard` shows it. No email yet (email is 2.3 polish). No fancy enrichment (Phase 3+).
+
+**Five hard requirements that are EXCLUDED from 2.1:**
+
+- ❌ Email delivery (Resend) — deferred to 2.3
+- ❌ Voice DNA integration in scoring — that's what the alpha tests
+- ❌ Action engine — Phase 3
+- ❌ Brain features — Phase 4+
+- ❌ Community Brain — Phase 8
+
+**Gate to enter 2.2:** A non-Victor user can complete a brief cycle end-to-end without intervention. Verified by a real test (e.g., Victor's friend signs up, sees their first brief within their configured cadence, without Victor SQL-ing anything).
+
+---
+
+#### 2.2 — Outcome capture UI (T0.1 from IDEAS_BACKLOG)
+
+**Goal:** Save / dismiss / rate UI on `/briefs/[id]` wired to `upsert_article_outcome` RPC. Sub-30-second friction.
+
+- [ ] `<OutcomeButtons>` component per article (save / dismiss / "took action")
+- [ ] `<RatingChip>` 1-5 stars + worth-it boolean
+- [ ] Optimistic UI (no spinner; revert on error)
+- [ ] `behavioral_events` fan-out happens server-side via the RPC (already wired in `upsert_article_outcome`)
+- [ ] `compliance_audit_log` writes for every outcome event (per `compliance.md` §7)
+- [ ] DMG-aware visibility: outcome counts visible to user ("3 outcomes captured this week")
+
+**Gate to enter 2.3:** Outcome capture takes < 5 seconds per article on first try by a stranger. Tested by a real non-Victor user.
+
+---
+
+#### 2.3 — Alpha-readiness polish (the minimum to NOT embarrass)
+
+**Goal:** A fresh signup → first brief → outcome capture loop that doesn't require any operator hand-holding.
+
+- [ ] Brief email delivery via Resend (transactional). Per `email-deliverability.md` SPF/DKIM/DMARC first.
+- [ ] Account deletion endpoint actually wipes data (per `compliance.md` §8 DSR)
+- [ ] Data export endpoint returns valid JSON
+- [ ] Hostile second-user test pass: complete §3.2 from `GOAL.md` against a recruited stranger
+- [ ] Compliance audit log populated for every regulated event
+- [ ] Off-platform backup (T0.4) running daily + first restore drill done
+- [ ] Pre-launch QA matrix 15-test pass (per `hostile-architect.md`)
+- [ ] Stripe NOT wired yet — alpha is invite-only and free
+
+**Gate to enter 2.4:** §3.2 (hostile second user) and §3.5 (compliance posture) from `GOAL.md` are TRUE.
+
+---
+
+#### 2.4 — Alpha recruiting (no code, all human)
+
+**Goal:** 3-5 external users with skin in the game commit to a 4-week alpha.
+
+- [ ] Identify candidates from Victor's network. Target diversity:
+  - 1 finance person (testing tickers, earnings, M&A categories)
+  - 1 journalist / writer (testing voice DNA on long-form)
+  - 1 researcher / academic (testing scientific journal sources)
+  - 1 developer / product person (testing tech sources)
+  - 1 strategist / consultant (testing cross-category synthesis)
+- [ ] Personal outreach by Victor (NOT a marketing site — this is "would you do me a favor")
+- [ ] Each user signs a one-page expectations doc:
+  - 4 weeks minimum usage
+  - Capture ≥ 10 outcomes per week
+  - 30-minute exit interview
+  - Their data stays theirs; opt out anytime
+- [ ] Track recruiting in a private `alpha-users.md` (NOT committed; sensitive data)
+
+**Gate to enter 2.5:** ≥3 users confirmed and onboarded. Personal accounts on the dev project (NOT prod yet).
+
+---
+
+#### 2.5 — Alpha run (4 weeks of patience)
+
+**Goal:** Let the data accumulate. Resist the urge to ship features.
+
+- [ ] Weekly check-in with each alpha user (15 min, voice or async)
+- [ ] Weekly metric snapshot to `alpha-metrics.md` (private):
+  - Outcomes captured per user
+  - Save/dismiss ratio per user
+  - Edit / correction count per user
+  - Voice-DNA-ranking delta (week-N vs week-1) per user
+  - Bug reports + UX friction notes
+- [ ] Bug fixes — yes; new features — no
+- [ ] Voice DNA still being captured passively (edits, dismissals, save patterns) but NOT yet driving ranking
+- [ ] At end of week 4: a Voice-DNA-on / Voice-DNA-off A/B is presented to each user, blinded
+
+**Gate to enter 2.6:** 4 weeks elapsed. Real data exists.
+
+---
+
+#### 2.6 — Delta measurement + go/no-go decision
+
+**Goal:** Honest verdict. Did the flywheel spin?
+
+- [ ] Compute Voice-DNA-ranking delta per user (week-1 stated relevance vs. week-4 stated relevance)
+- [ ] Required for green light: ≥ 3 of 5 users show ≥ +10 percentile-points improvement
+- [ ] Required for green light: at least 1 user logged a Phase-3 action outcome (even if Phase 3 is incomplete, the outcome rating)
+- [ ] Required for green light: at least 1 cohort crossed k=5 in Community Brain
+- [ ] Exit interview with each alpha user
+- [ ] Re-score the 6-axis scorecard from `GOAL.md` §2
+- [ ] `DECISIONS.md` entry: "Alpha results — what we proved, what we didn't, what we changed"
+
+**Three possible outcomes:**
+
+1. **Green light** — All three required items hit. Composite scorecard ≥ 65/100. → Move to Phase 3 (action engine + the rest of the pipeline modules).
+2. **Yellow light** — Some hit, some didn't. Composite 55-64/100. → Diagnose what's missing, run a 4-week Phase 2b alpha with refinements. NOT Phase 3.
+3. **Red light** — Flywheel did not spin. Composite < 55/100. → Stop. Strategic pivot or wind-down decision. Honest founder conversation, not a sprint.
+
+---
+
 ## ✅ PHASE 1.5 CLOSED — 2026-05-15
 
 - Phase 0: CLOSED (commit d09300a)
 - Phase 1: CLOSED 2026-05-12 (commit ab471e0)
-- Phase 1.5: **CLOSED 2026-05-15** (commit 3ee8b69) — ALL GATES PASSED
-  - Catalog: **218 rows**, 100% embedded, **13 distinct categories**, 51 subcategories, median quality 0.850
+- Phase 1.5: CLOSED 2026-05-15 (commit ebd4b9d) — ALL GATES PASSED
+  - Catalog: 218 rows, 100% embedded, 13 distinct categories, 51 subcategories, median quality 0.850
   - Skeleton: 100% — every Phase 1.5 file/route/component exists + passes all gates
   - Cost-audit: PASSED 2026-05-24 (commit e2b46b8)
-  - verify:phase-1-5: ✅ 11/11 gates — tsc, lint, verify:db, verify:columns, verify:rls, verify:honest-strings, verify:env-vars, verify:cron-routes, verify:cron-empty-handling, verify:source-catalog, playwright e2e
-- Phase 2 prep: DRAFTED (commit dbafdbf — file-only)
-
-**Next:** Phase 2 — apply article_outcomes migration + remove from PENDING_MIGRATION_TABLES
-
----
-
-## Pre-park sprint state (reference only — historical)
-
-### Phase 1.5: AI-Assisted Source Discovery — last update 2026-05-24
-**Status (as of park):** Phase 1 closed 2026-05-12; Phase 1.5 catalog seeded 67/200 sources, 5/10 categories
-**Started:** 2026-05-05 (overnight autonomous build, parallel with Phase 1 close)
-**Last update before park:** 2026-05-24
-
-### Where we are right now (post-2026-05-24 session)
-
-**Catalog state (MCP-verified):**
-- 67 rows total, 100% embedded
-- 5 categories: medicine, finance, tech, sciences, geopolitics
-- 17 subcategories
-- Median quality 0.880 (target ≥0.65 ✓)
-- 88% free or freemium (target ≥50% ✓)
-
-**Phase 1.5 close still needs ~3-4 more sessions of curator dispatches:**
-- ~133 more rows (target ≥200)
-- ~5 more categories (target ≥10: education, arts, lifestyle, sports, civic, etc per VECTORS.md)
-- Then: real onboarding round-trip smoke + cost audit (currently blocked on Anthropic key) + verify:phase-1-5 + close commit
-
-**Recommended next 4 curator batches (parallel dispatch, foreground only):**
-1. `education / edtech` — Khan Academy, EdSurge, Inside Higher Ed, Hechinger, Substack edtech
-2. `arts / literature` — NYRB, LARB, Paris Review, Lit Hub, Substack literary
-3. `sports / strategy` — The Athletic, ESPN xG, FiveThirtyEight sports, RotoWire
-4. `lifestyle / longevity` — Peter Attia, Huberman, Outlive newsletter, podcast feeds
-
-After those 4: ~120 rows, 9 categories. One more wave (5 categories × 10 sources = 50 rows) to clear Phase 1.5 gate.
-
-**What "skeleton built" means:** Every Phase 1.5 file/route/component exists, type-checks clean, lints clean, and passes the pre-commit gates. Catalog seeding via the `source-catalog-curator` subagent + dev DB migration apply happen in dedicated Phase 1.5 sessions. Those are the only remaining gates between skeleton and ship.
-
-### Skeleton inventory (all committed; see overnight commits 09a2bd2 → 938ceb6)
-
-| Block | Deliverable | Files | Commit |
-|---|---|---|---|
-| A | source_catalog + source_suggestions migrations | 2 SQL | 09a2bd2 |
-| B | Catalog seed dir + curator dispatch README | 1 MD | 3817625 |
-| C | Onboarding wizard (3 pages + layout + 3 client components + 2 API routes + 4 lib files) | 14 ts/tsx | 818b465 |
-| D | Claude/OpenAI/Perplexity providers + router wiring | 4 ts | e2f8991 |
-| E | Source-validator runtime + onboarding e2e stubs | 3 ts | be44173 |
-| F | verify-phase-1-5 + verify-source-catalog + checklist + npm scripts | 4 files | 8c64d70 |
-| G | /sources page redesign (CatalogBrowser + SuggestionsPanel + SourceHealth) | 4 tsx | 938ceb6 |
-
-### Remaining for Phase 1.5 close
-
-1. ✅ Apply migrations 20260510000000_source_catalog.sql + 20260510000001_source_suggestions.sql — APPLIED 2026-05-05 to ymgbjtgczgnooscigplb
-2. ✅ Apply seeds/source_catalog_rag_rpc.sql + switch to SECURITY INVOKER — APPLIED 2026-05-05 (advisor confirmed clean: 5 known/accepted warnings, 0 new from Phase 1.5)
-3. ✅ Embed backfill script written (`scripts/embed-source-catalog.ts`, commit `f278ece`)
-4. ⏳ Add ANTHROPIC_API_KEY, OPENAI_API_KEY, PERPLEXITY_API_KEY to .env.local + Vercel
-5. ⏳ Run source-catalog-curator subagent for ≥10 (category, subcategory) pairs to seed ≥200 sources (file-by-file commits per README in supabase/seeds/source_catalog/)
-6. ⏳ Run embed-source-catalog backfill script after each curator seed batch
-7. ⏳ Smoke test: real onboarding run → proposals returned → /onboarding/finalize → sources written
-8. ⏳ Run `npm run verify:phase-1-5` (with dev server) → all gates green
-9. ⏳ `feat: phase 1.5 complete` commit with AUDIT GATE [phase-1-5] + PHASE AUDIT blocks
+  - verify:phase-1-5: ✅ 11/11 gates
+- Phase 2 prep: migration landed (commit 16e73d3) — `article_outcomes` table + `source_suggestions` audit columns
+- 2026-05-16 strategic checkpoint: scorecard 51/100, Phase 2 re-scoped to closed alpha
 
 ---
 
-## Phase 1: Pipeline Infrastructure (PRIOR — pending close)
-**Status:** Audit complete (7 blockers identified, all fixes landed) — 2026-05-04
-**Started:** 2026-04-30 (after Phase 0 closed)
-**Last update:** 2026-05-05 (Phase 1.5 build did not regress Phase 1 gates)
+## 🔮 PHASES 3+ (per IDEAS_BACKLOG, gated on alpha proof)
 
-**Revised closure criteria (DECISIONS.md 2026-05-04):** "Pipeline infrastructure is ready and dormant until users tell it what to do — and the pipeline genuinely does nothing until they do." Articles only flow after Phase 1.5 (AI-Assisted Source Discovery) ships.
+Locked in `IDEAS_BACKLOG.md`. Do not pull forward without an explicit DECISIONS.md entry. Specifically:
 
-### Phase 1 audit findings (commit `e631bb5`, audit file `.claude/checklists/phase-1-audit-2026-05-04.md`)
+- **Phase 3** (Action engine + full pipeline modules) gates on alpha green light (§2.6)
+- **Phase 4** (Brain — dot connector + long memory) gates on Phase 3 + ≥1 action outcome
+- **Phase 5** (Voice DNA full surface) gates on first user crossing N=10 edits
+- **Phase 6** (Trust escalation + outcome tracking) gates on action outcomes flowing
+- **Phase 7** (Build kickoff packages) gates on multi-action-vector user
+- **Phase 8** (Community Brain default-on cohort surface) gates on first k=5 hit
+- **Phase 9** (Agents) gates on Trust Ladder Loop 6+ for ≥3 users
+- **Phase 10** (Mobile / PWA) gates on web retention week-12 ≥ 40% across paying users
 
-| # | Blocker | Status |
-|---|---|---|
-| 1 | `/api/cron/ingest` calls 4 paid news APIs unconditionally for every user | ✅ FIXED — gated by source-type presence |
-| 2 | Project bootstrap SQL not yet applied to dev DB | ⏳ MANUAL — Victor pastes once |
-| 3 | `verify:pipeline-flow` hard-fails when pipeline is correctly dormant | ✅ FIXED — replaced by `verify:cron-empty-handling` |
-| 4 | `verify:cron-empty-handling` script missing | ✅ FIXED — `scripts/verify-cron-empty-handling.ts` shipped |
-| 5 | Fetcher refactor (per-source config) hardcodes "general" category | 🟡 DEFERRED — Phase 1.5 work (no user has these source types yet; gating in Blocker 1 fix prevents harm) |
-| 6 | 4 hardcoded `.limit(...)` UX values (score 100, deliver 20, briefs 30, feed 50) | ✅ FIXED — migration `20260504000000_user_preferences_pagination.sql` + routes wire prefs |
-| 7 | `CURRENT_SPRINT.md` stale (Phase 0-only) | ✅ FIXED — this update |
-
-**Remaining for Phase 1 close:**
-1. ⏳ Victor pastes `supabase/seeds/phase-1-project-bootstrap.sql` once (vault secret + base_url + cron jobs active)
-2. ⏳ Victor runs Supabase advisor scan (security + performance), confirms 0 critical findings
-3. ⏳ Re-run `phase-auditor` subagent → confirm zero blockers
-4. ⏳ Run `npm run verify:phase-1` (with dev server) → green
-5. ⏳ Run Playwright e2e once dev server is up → 4/4 specs pass
-6. ⏳ `feat: phase 1 complete` commit with AUDIT GATE + PHASE AUDIT blocks in body
+The order is the order. No skipping.
 
 ---
 
-## Phase 0: Foundation (DONE — commit `d09300a`, 2026-04-30)
-**Status:** ✅ COMPLETE — all 8 gates green
-**Started:** 2026-04-13
-**Closed:** 2026-04-30 (all 8 verify:phase-0 gates green)
+## Anti-drift reminders (re-read at every session start)
 
-**State as of 2026-04-30:** Phase B column-drift fixes complete and mechanically verified. All 7 structural gates pass:
+- **The standard is `GOAL.md`.** Not "we've done a lot of work." Not "look at the architecture." Not "the demo works." The bar is a composite ≥70/100 with all axes above their hard floors and all §3 claims simultaneously true.
+- **Phase 2 is closed alpha, not pipeline build.** Building more pipeline modules before the alpha is built on speculation. Defer.
+- **Features in `IDEAS_BACKLOG.md` are gated.** A T1 item cannot be picked up before the corresponding T0 proof is green. Promoting requires an explicit founder approval + `DECISIONS.md` entry.
+- **Every commit subject containing "done|complete|finished|ship" requires an `AUDIT GATE` block.** Pre-commit hook enforces. Don't try to talk your way around it.
+- **A "complete" feature is one a stranger can use end-to-end without intervention.** Not "the code compiles." Not "the test passes." A stranger.
+
+---
+
+## Next sessions — concrete prompts
+
+### Session A — Strategic checkpoint commit (15 minutes)
 
 ```
-AUDIT GATE [phase-0]
-✓ tsc --noEmit             — pass
-✓ lint                     — pass
-✓ verify:db                — pass    (7/7 migrations, 69 tables)
-✓ verify:columns           — pass    (0 mismatches across 30 call sites, 75 files)
-✓ verify:rls               — pass    (69/69 tables RLS-enabled with policies)
-✓ verify:honest-strings    — pass    (0 fakery occurrences)
-✓ verify:env-vars          — pass    (4/4 Phase 0 required vars wired)
-verified-at: 2026-04-30T01:57:49.736Z
+Resume ForgeMinds. GOAL.md + IDEAS_BACKLOG.md + CURRENT_SPRINT.md rewrite
+are drafted (just landed in 3 Write tool calls in the prior session).
+
+Tasks:
+1. Append a DECISIONS.md entry dated 2026-05-16 titled "Phase 2 re-scoped:
+   pipeline plumbing → closed alpha; scorecard 51/100; target ≥70/100."
+   Cite GOAL.md §2, IDEAS_BACKLOG.md sequencing, and the Explore-agent
+   strategic audit conclusions.
+2. Stage GOAL.md, IDEAS_BACKLOG.md, CURRENT_SPRINT.md, DECISIONS.md.
+3. Commit with subject: "docs(phase-2): lock the bar — closed-alpha refocus
+   + ideas backlog + scorecard 51/100"
+4. No code changes. No pipeline work. Only this strategic checkpoint.
+
+Stop after commit. Report git log oneline -3.
 ```
 
-The 8th gate (Playwright e2e) requires `npm run dev` running concurrently and a Vercel deploy for the `/api/health` smoke test. That's the only remaining mechanical work for Phase 0 sign-off.
+### Session B — Phase 2.1 minimum pipeline kickoff (after Session A)
 
-### Phase A — Enforcement Infrastructure (installed 2026-04-29)
+```
+ForgeMinds Phase 2.1 — minimum pipeline for alpha (CURRENT_SPRINT.md §2.1).
 
-- [x] Lessons #93-96 appended to factory `.claude/rules/lessons.md`
-- [x] VIBE Rule 35 strengthened (5 sequential gates) in `vibe-standard.md`
-- [x] Phase 5.5 Audit Gate added to `execution.md`
-- [x] `.claude/CLAUDE.md` 🔴 PHASE COMPLETION ENFORCEMENT section added
-- [x] `DECISIONS.md` 2026-04-29 audit decision recorded
-- [x] `ARCHITECTURE_NOTES.md` Schema Canonical Names Reference table added
-- [x] `scripts/verify-columns.ts` — schema drift detector
-- [x] `scripts/verify-rls.ts` — RLS coverage gate
-- [x] `scripts/verify-honest-strings.ts` — fakery scanner
-- [x] `scripts/verify-env-vars.ts` — env-var wiring gate
-- [x] `scripts/verify-phase-0.ts` — orchestrator + AUDIT GATE block emitter
-- [x] `playwright.config.ts` + `e2e/{health,auth,dashboard,sources}.spec.ts`
-- [x] `.claude/checklists/{phase-template,phase-0-complete,phase-1-complete}.md`
-- [x] `.husky/pre-commit` hook (AUDIT GATE wording check + tsc + verify:columns + secret grep + lint)
-- [x] `package.json` scripts wired (`verify:*`, `e2e`, `prepare: husky`) and `husky` + `@playwright/test` added to devDependencies
+Five hard requirements, no more, no less:
+  1. /api/cron/ingest fires per-user, only invokes per-source-type fetchers
+  2. /api/cron/score produces composite_score (baseline only — NO Voice DNA yet)
+  3. /api/cron/curate picks top N per user_preferences.max_articles_per_brief
+  4. /api/cron/generate writes a briefs row with prompt_version
+  5. /briefs/[id] page renders the brief
 
-### Phase A — Activation steps (Victor to run, one-time)
+EXCLUDED from this session: email, Voice DNA, action engine, Brain, Community.
 
-These three commands activate everything Phase A installed:
+For each route: read what exists (Phase 0/1 left skeletons), audit against
+the actual live schema columns, fix what's broken, leave what works.
 
-```bash
-cd projects/forgeminds
-npm install                        # installs husky + @playwright/test
-npx playwright install chromium    # downloads the browser binary
-chmod +x .husky/pre-commit         # (Git Bash / WSL); on plain Windows PowerShell, use: git update-index --chmod=+x .husky/pre-commit
+Gate: a non-Victor user (Victor's friend on a real signup) can see their
+first brief land on /dashboard within their configured cadence, with zero
+SQL intervention.
+
+Audit gate at end. Stop. Report.
 ```
 
-Then in Supabase SQL editor (one-time, required for `verify:columns` and `verify:rls`):
+### Session C — Phase 2.2 outcome capture UI (after Session B verifies)
 
-```sql
-create or replace function public.forgeminds_columns()
-  returns table(table_name text, column_name text)
-  language sql security definer set search_path = public
-  as $$
-    select c.table_name::text, c.column_name::text
-    from information_schema.columns c
-    where c.table_schema = 'public';
-  $$;
-grant execute on function public.forgeminds_columns() to service_role;
+```
+ForgeMinds Phase 2.2 — outcome capture UI (CURRENT_SPRINT.md §2.2).
 
-create or replace function public.forgeminds_rls_state()
-  returns table(table_name text, rls_enabled boolean, policy_count bigint)
-  language sql security definer set search_path = public
-  as $$
-    select c.relname::text,
-           c.relrowsecurity,
-           coalesce((select count(*) from pg_policies p
-                       where p.schemaname='public' and p.tablename=c.relname), 0)
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname='public' and c.relkind='r'
-    order by c.relname;
-  $$;
-grant execute on function public.forgeminds_rls_state() to service_role;
+Build <OutcomeButtons> + <RatingChip> on /briefs/[id], wired to
+upsert_article_outcome RPC (already landed in commit 16e73d3).
+
+Friction floor: < 5 seconds per article.
+
+compliance_audit_log writes for every outcome.
+
+Stop after the friction-floor test passes with a non-Victor user.
 ```
 
-Then run the first audit:
+---
 
-```bash
-npm run verify:phase-0:no-e2e      # runs every gate except Playwright (until you've started `npm run dev`)
-```
-
-Expected: most gates fail (this is the point — we now mechanically know what's broken).
-
-### Phase B — Fix broken + complete incomplete (next session)
-
-Per the master plan, Phase B fixes will follow the broken-paths surfaced by `verify:columns`. Sketch:
-
-- [ ] `src/app/api/cron/ingest/route.ts` — `enabled` → `is_active`, `description` → `summary`, `metadata` → `raw_metadata`, add `user_id`, fix `pipeline_runs` field names
-- [ ] `src/app/api/cron/score/route.ts` — `fetched_at` → `created_at`, `raw_article_id` → `article_id`, score-column rename, conflict key fix
-- [ ] `src/app/api/cron/curate/route.ts` — `scored_at` → `created_at`, fix `briefs` upsert columns
-- [ ] `src/app/(dashboard)/page.tsx` — `description`/`metadata` → `summary`/`raw_metadata`, `symbol` → `ticker_symbol`
-- [ ] `src/components/feed/{article-feed,article-card}.tsx` — type/prop name fixes
-- [ ] `src/components/sources/add-source-dialog.tsx` — wire submission
-- [ ] `src/lib/ai/router.ts` — stub-and-throw unimplemented providers
-- [ ] `src/app/api/auth/logout/route.ts` — create (was missing)
-- [ ] Re-run `npm run verify:phase-0`. Repeat until clean.
-- [ ] Sign off `phase-0-complete.md` with the AUDIT GATE block pasted at the bottom.
-
-### Phase C — Build forward to end-to-end pipeline
-
-Only proceeds after Phase B mechanically passes. See plan file `C:\Users\vtbsj\.claude\plans\sparkling-waddling-pinwheel.md` Phase C.
-
-### ✅ Done
-- [x] Scaffold Next.js 16 + Tailwind v4 + shadcn/ui
-- [x] Design system: ForgeMinds colors, fonts, semantic tokens
-- [x] CLAUDE.md project instructions + 4-layer no-hallucination architecture
-- [x] DECISIONS.md, IDEAS.md, ARCHITECTURE_NOTES.md (persistent thinking)
-- [x] PWA manifest
-- [x] launch.json for dev server
-- [x] `.env.local` populated (Phase 0 keys + many Phase 1+ keys)
-- [x] Leaked OpenAI key revoked + replaced with restricted key
-- [x] Supabase project created (ymgbjtgczgnooscigplb)
-- [x] All 8 schema migrations applied (69 tables)
-- [x] Role grants restored after schema reset (lesson learned)
-- [x] Verify script working (`npx tsx scripts/verify-db.ts`)
-- [x] Action templates registry stubs (10 templates)
-- [x] Tool capabilities seed (30 tools, 6 lessons learned)
-- [x] OAuth-based Supabase MCP wired (project-scoped)
-
-### 🟡 In progress / next session
-- [ ] Run Supabase security advisor + fix any RLS findings
-- [ ] Build authenticated dashboard layout (sidebar, topbar, mobile nav, bell icon)
-- [ ] Wire Supabase Auth UI (signup/signin pages)
-- [ ] Build empty-state pages for /, /archive, /sources, /content, /settings, /analytics
-- [ ] Deploy to Vercel
-- [ ] Verify deployed `/api/health` endpoint
-- [ ] Domain setup (forgeminds.app via Cloudflare Registrar)
-
-### Verification criteria for Phase 0 done
-- [x] All 7 migrations applied (✓ verified via verify-db.ts and supabase migration list)
-- [x] RLS active on all tables (✓ enabled in migrations)
-- [x] JS SDK can query tables with anon/service_role keys (✓ confirmed)
-- [ ] Auth flow works (signup → confirm → login → see dashboard)
-- [ ] All dashboard pages render with empty states (DMG Level 0: Ghost)
-- [ ] PWA installable on mobile
-- [ ] Build passes with zero TypeScript errors
-- [ ] Deployed to Vercel and `/api/health` returns OK
-
-### Architecture state
-- 70 tables across 8 migrations
-- 6-layer Brain Stack documented
-- 10 action templates stubbed (Phase 1 implementation)
-- 30+ tool capabilities cataloged (HuntHive lessons captured)
-- OAuth MCP for Supabase project-scoped to ymgbjtgczgnooscigplb
-- Stack confirmed: Vercel + Supabase + Cloudflare DNS (Option C from build-vs-buy decision)
-
-### What's blocked / parked
-- Supabase Agent Skills installer (parked — interactive installer; revisit when needed)
-- Build kickoff package generator UI (Phase 4)
-- Voice DNA edit-learning (Phase 4)
-- Collective Brain processing pipeline (Phase 7)
+*This file is the active path. Re-read at every session start. The bar is in `GOAL.md`. The parking lot is in `IDEAS_BACKLOG.md`. The history is in `DECISIONS.md`.*
