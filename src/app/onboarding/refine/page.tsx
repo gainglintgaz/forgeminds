@@ -57,7 +57,7 @@ export default async function OnboardingRefinePage() {
   if (rows.length === 0) {
     return (
       <div className="space-y-4">
-        <Step indicator="2 of 3" />
+        <Step indicator="2 of 4" />
         <div className="rounded-md border border-zinc-200 bg-white p-6 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
           <p className="font-medium">No proposals yet.</p>
           <p className="mt-1 text-zinc-500">
@@ -76,7 +76,7 @@ export default async function OnboardingRefinePage() {
 
   return (
     <div className="space-y-6">
-      <Step indicator="2 of 3" />
+      <Step indicator="2 of 4" />
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         I picked {rows.length} sources from the catalog based on what you said.
         Toggle off the ones you don&apos;t want, then continue.

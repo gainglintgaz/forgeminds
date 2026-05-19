@@ -1,11 +1,77 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { routeAIRequest, PROMPT_VERSION } from "@/lib/ai/router";
-import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
+import {
+  resolveUserId,
+  loadPrefs,
+  SYSTEM_USER_ID,
+  type StyleAnchor,
+  type StyleTone,
+  type StyleDensity,
+} from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 120;
 
-const GENERATE_PROMPT_VERSION = "generate-v0.1";
+// v0.2 — adds Voice DNA style adaptation layer (style_anchors + tone + density)
+// per migration 20260518000000. Prior v0.1 was style-agnostic.
+const GENERATE_PROMPT_VERSION = "generate-v0.2";
+
+interface StylePrefs {
+  anchors: StyleAnchor[];
+  tone: StyleTone | null;
+  density: StyleDensity | null;
+}
+
+const TONE_DESCRIPTIONS: Record<StyleTone, string> = {
+  concise: "Tight sentences, low ceremony, no throat-clearing.",
+  analytical: "Numbers + structured reasoning; lead with the data, then the implication.",
+  conversational: "Like a smart friend explaining over coffee. Contractions OK, jargon translated.",
+  academic: "Hedged, careful, citation-aware. Mark uncertainty explicitly.",
+  investigative: "Adversarial, name names, follow money. Skeptical of official narratives.",
+};
+
+const DENSITY_DESCRIPTIONS: Record<StyleDensity, string> = {
+  telegraphic: "Headlines + one-line summaries. Each item ≤ 20 words. The whole brief reads like a wire feed.",
+  paragraph: "One paragraph per item (40-80 words). Standard reading rhythm.",
+  longform: "Multi-paragraph essay treatment. Connect items into a narrative when they share a theme.",
+};
+
+/**
+ * Render the Voice DNA prefix that prepends the system prompt. Empty
+ * string when the user hasn't captured style anchors yet — keeps v0.1
+ * behavior intact for un-captured users.
+ *
+ * NOTE: this session does NOT fetch sample text from anchor URLs.
+ * Future enhancement (deferred): cache an excerpt per anchor via
+ * Jina Reader so the model can match cadence/vocabulary, not just
+ * name-check.
+ */
+function buildStylePrefix(style: StylePrefs): string {
+  if (style.anchors.length === 0 && !style.tone && !style.density) return "";
+
+  const lines: string[] = ["", "STYLE ADAPTATION (read carefully — this shapes EVERY sentence):"];
+
+  if (style.anchors.length > 0) {
+    lines.push(
+      `- The reader's declared style anchors: ${style.anchors
+        .map((a) => (a.why ? `${a.name} (${a.why})` : a.name))
+        .join("; ")}`
+    );
+    lines.push(
+      "  Match the rhythm, vocabulary, and stance of those writers as closely as possible without quoting them."
+    );
+  }
+  if (style.tone) {
+    lines.push(`- Tone: ${style.tone}. ${TONE_DESCRIPTIONS[style.tone]}`);
+  }
+  if (style.density) {
+    lines.push(`- Density: ${style.density}. ${DENSITY_DESCRIPTIONS[style.density]}`);
+  }
+  lines.push(
+    "- Style adaptation NEVER overrides the HARD RULES below (no invention, no fabricated numbers)."
+  );
+  return lines.join("\n");
+}
 
 interface ArticleForBrief {
   id: string;
@@ -22,11 +88,15 @@ interface ArticleForBrief {
  * architecture). The model never invents prices, names, or events — it
  * synthesizes the supplied list into a readable digest.
  */
-function buildBriefPrompt(articles: ArticleForBrief[]): {
+function buildBriefPrompt(
+  articles: ArticleForBrief[],
+  style: StylePrefs
+): {
   system: string;
   user: string;
 } {
-  const system = `You are ForgeMinds, a personal intelligence brief generator.
+  const stylePrefix = buildStylePrefix(style);
+  const system = `You are ForgeMinds, a personal intelligence brief generator.${stylePrefix}
 
 HARD RULES:
 - Never invent facts. Only paraphrase, summarize, or rephrase the article list provided.
@@ -179,7 +249,11 @@ export async function GET(request: Request) {
 
       // Call AI router. Task is "generate-brief" — router picks Grok with
       // Gemini Flash fallback. Either way the response.content is JSON.
-      const { system, user } = buildBriefPrompt(articles as ArticleForBrief[]);
+      const { system, user } = buildBriefPrompt(articles as ArticleForBrief[], {
+        anchors: prefs.style_anchors,
+        tone: prefs.style_tone,
+        density: prefs.style_density,
+      });
       let synthesis: BriefSynthesis | null = null;
       let aiModel: string | undefined;
       let aiCostUsd = 0;

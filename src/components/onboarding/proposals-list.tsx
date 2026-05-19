@@ -66,7 +66,7 @@ export function ProposalsList({ suggestions }: { suggestions: Suggestion[] }) {
         "onboarding_picks",
         JSON.stringify({ acceptedCatalogIds, totalMonthlyCost })
       );
-      router.push("/onboarding/confirm");
+      router.push("/onboarding/style");
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);

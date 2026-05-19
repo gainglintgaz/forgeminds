@@ -31,7 +31,7 @@ export default async function OnboardingConfirmPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white dark:bg-zinc-50 dark:text-zinc-900">
-          3 of 3
+          4 of 4
         </span>
         <span className="text-xs uppercase tracking-wide text-zinc-500">
           Confirm + start

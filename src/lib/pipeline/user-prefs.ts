@@ -36,6 +36,26 @@ export interface PipelinePrefs {
   deliver_batch_size: number;
   briefs_page_size: number;
   dashboard_feed_size: number;
+  // Voice DNA capture (migration 20260518000000). Null until the user
+  // completes /onboarding/style.
+  style_anchors: StyleAnchor[];
+  style_tone: StyleTone | null;
+  style_density: StyleDensity | null;
+  style_captured_at: string | null;
+}
+
+export type StyleTone =
+  | "concise"
+  | "analytical"
+  | "conversational"
+  | "academic"
+  | "investigative";
+export type StyleDensity = "telegraphic" | "paragraph" | "longform";
+export interface StyleAnchor {
+  name: string;
+  url?: string;
+  why?: string;
+  captured_at?: string;
 }
 
 // Defaults match what was hardcoded in the routes before the per-user redesign.
@@ -57,6 +77,10 @@ export const DEFAULT_PREFS: Omit<PipelinePrefs, "user_id"> = {
   deliver_batch_size: 20,
   briefs_page_size: 30,
   dashboard_feed_size: 50,
+  style_anchors: [],
+  style_tone: null,
+  style_density: null,
+  style_captured_at: null,
 };
 
 export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -91,7 +115,7 @@ export async function loadPrefs(
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size"
+      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size, style_anchors, style_tone, style_density, style_captured_at"
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -117,5 +141,9 @@ export async function loadPrefs(
     deliver_batch_size: data?.deliver_batch_size ?? DEFAULT_PREFS.deliver_batch_size,
     briefs_page_size: data?.briefs_page_size ?? DEFAULT_PREFS.briefs_page_size,
     dashboard_feed_size: data?.dashboard_feed_size ?? DEFAULT_PREFS.dashboard_feed_size,
+    style_anchors: (data?.style_anchors as StyleAnchor[] | null) ?? DEFAULT_PREFS.style_anchors,
+    style_tone: (data?.style_tone as StyleTone | null) ?? DEFAULT_PREFS.style_tone,
+    style_density: (data?.style_density as StyleDensity | null) ?? DEFAULT_PREFS.style_density,
+    style_captured_at: data?.style_captured_at ?? DEFAULT_PREFS.style_captured_at,
   };
 }
