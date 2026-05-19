@@ -39,6 +39,7 @@ interface OutcomeRow {
   article_id: string;
   outcome: Outcome;
   rating: number | null;
+  updated_at: string | null;
 }
 
 export default async function BriefDetailPage({
@@ -80,19 +81,45 @@ export default async function BriefDetailPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const outcomesByArticle = new Map<string, { outcome: Outcome; rating: number | null }>();
+  const outcomesByArticle = new Map<
+    string,
+    { outcome: Outcome; rating: number | null; updated_at: string | null }
+  >();
   if (user && articleIds.length > 0) {
     const { data: outcomeRows } = await supabase
       .from("article_outcomes")
-      .select("article_id, outcome, rating")
+      .select("article_id, outcome, rating, updated_at")
       .eq("user_id", user.id)
       .in("article_id", articleIds);
     for (const row of (outcomeRows ?? []) as OutcomeRow[]) {
       outcomesByArticle.set(row.article_id, {
         outcome: row.outcome,
         rating: row.rating,
+        updated_at: row.updated_at,
       });
     }
+  }
+
+  // Outcome count for the week — DMG-aware header chip per Bridge Brief
+  // §5 (Data Citizenship destinations include "this bar header"). We
+  // count distinct (article, outcome ≠ no_action) rows the user has
+  // captured in the trailing 7 days. Single .gte() query, no N+1.
+  // Note: this is a server component with `dynamic = "force-dynamic"` —
+  // it runs once per request, so reading the current clock is the
+  // intended behavior. React 19 react-hooks/purity flags Date.now() as
+  // impure assuming client re-render semantics; disabled here because
+  // the assumption doesn't hold for dynamic server components.
+  // eslint-disable-next-line react-hooks/purity
+  const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  let outcomesThisWeek = 0;
+  if (user) {
+    const { count } = await supabase
+      .from("article_outcomes")
+      .select("outcome_id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("updated_at", weekAgoIso)
+      .neq("outcome", "no_action");
+    outcomesThisWeek = count ?? 0;
   }
 
   return (
@@ -113,6 +140,39 @@ export default async function BriefDetailPage({
           {(brief.article_count ?? articles.length) === 1 ? "story" : "stories"}
           {brief.is_delivered ? " · Delivered" : " · Pending delivery"}
         </p>
+        {/* DMG-aware outcome-count chip. Per Bridge Brief §5 + the
+            data-integrity rule (rules/data-integrity.md): show a real
+            number when the user has captured at least one outcome this
+            week; show an honest empty-state prompt otherwise. The
+            sample-size threshold for displaying = 1, per the contract
+            that outcome capture is binary and AVAILABLE from brief #1
+            (Bridge Brief §1 five-states). */}
+        <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+          {outcomesThisWeek > 0 ? (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-1 dark:bg-zinc-800"
+              title={[
+                `${outcomesThisWeek} outcome${outcomesThisWeek === 1 ? "" : "s"} captured in the trailing 7 days.`,
+                "",
+                "Source:       article_outcomes rows where outcome ≠ no_action",
+                "              and updated_at ≥ now() − 7 days",
+                "Derivation:   COUNT(*) per the query above",
+                "Destinations: this header · future per-user scoring weights",
+                "              (Phase 3) · alpha exit-interview metrics",
+                "Provenance:   updated_at on each underlying row",
+              ].join("\n")}
+            >
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              <span>
+                {outcomesThisWeek} outcome{outcomesThisWeek === 1 ? "" : "s"} captured this week
+              </span>
+            </span>
+          ) : (
+            <span className="text-zinc-400 italic">
+              No outcomes captured yet — one tap below tunes tomorrow&apos;s pick.
+            </span>
+          )}
+        </div>
         {brief.categories_covered && brief.categories_covered.length > 0 ? (
           <div className="flex flex-wrap gap-1 mt-3">
             {brief.categories_covered.map((c) => (
@@ -221,6 +281,7 @@ export default async function BriefDetailPage({
                         briefId={brief.id}
                         initialOutcome={stored?.outcome ?? "no_action"}
                         initialRating={stored?.rating ?? null}
+                        initialUpdatedAt={stored?.updated_at ?? null}
                       />
                     ) : null}
                   </CardContent>

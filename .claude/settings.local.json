@@ -193,7 +193,8 @@
       "Bash(mkdir -p C:/Users/vtbsj/victor-ai-factory/.claude/templates)",
       "Read(//c/Users/vtbsj/victor-ai-factory/.claude/templates/**)",
       "Bash(mkdir -p .claude/rules/reference)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(curl -sf http://localhost:3000 -o /dev/null)"
     ]
   }
 }
