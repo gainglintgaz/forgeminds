@@ -49,7 +49,7 @@ Rules:
 - Output STRICT JSON: an array of objects with shape { catalogId: string, reason: string, enabled: boolean }. No prose, no markdown, no code fences.
 - Set \`enabled: true\` for every recommendation (user toggles off in UI).
 
-ANTI-FABRICATION RULES (non-negotiable, per .claude/rules/data-flywheel.md §8):
+ANTI-FABRICATION RULES (non-negotiable, per .claude/rules/reference/data-flywheel.md §8):
 - Do NOT invent facts about the source. Specifically, do NOT claim subscriber counts, article/post/episode counts, publication frequency numbers, author names, awards, or accuracy stats unless they appear LITERALLY in the candidate's description text shown above.
 - If you have no specific verifiable fact about the source, ground your reason in: (a) what the USER said about their interests, and (b) words/phrases that appear in the candidate's description.
 - A claim like "10K subscribers" or "200+ articles per month" or "daily updates" must be a verbatim phrase from the description — otherwise omit it. Drop the source rather than fabricate.
@@ -147,7 +147,7 @@ export async function proposeSources(
   // doesn't reference a known candidate (defends against the LLM
   // hallucinating a catalog id) OR contains ungrounded factual claims
   // about the source (defends against the LLM puffing the source with
-  // invented stats — anti-fabrication rule per data-flywheel.md §8.2).
+  // invented stats — anti-fabrication rule per reference/data-flywheel.md §8.2).
   const candidatesById = new Map(candidates.filter((c) => c.catalogId).map((c) => [c.catalogId!, c]));
   const proposals: SourceProposal[] = [];
   for (const pick of picks) {
@@ -250,7 +250,7 @@ function isValidPick(
  * (case-insensitively) in the candidate's description, it's a fabrication
  * and the pick is dropped.
  *
- * Why drop instead of warn: per .claude/rules/data-flywheel.md §8.2,
+ * Why drop instead of warn: per .claude/rules/reference/data-flywheel.md §8.2,
  * "Reject and retry if not — never let unvalidated output reach users."
  * Dropping is the cheaper local equivalent of retrying — fewer proposals
  * for one user is far better than one fabricated stat.

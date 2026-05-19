@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  * LOCKED-state empty render for /onboarding/intake when the source
  * catalog isn't seeded enough yet to produce a useful onboarding run.
  *
- * Per .claude/rules/ai-first-principles.md §6 Data Threshold pattern:
+ * Per .claude/rules/reference/ai-first-principles.md §6 Data Threshold pattern:
  *   - Proves the feature exists (no vaporware feel)
  *   - Tells user exactly what unlocks it
  *   - Invites the next step
@@ -89,7 +89,7 @@ export function CatalogLockedState({
               catalog and let the AI fill in what&apos;s missing. Locked state
               with honest copy beats fake personalization. See{" "}
               <code className="rounded bg-zinc-200 px-1 py-0.5 text-[10px] font-mono dark:bg-zinc-800">
-                .claude/rules/ai-first-principles.md
+                .claude/rules/reference/ai-first-principles.md
               </code>{" "}
               §6.
             </p>

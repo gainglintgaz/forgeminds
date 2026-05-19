@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
  * `.in()` query — so first paint shows correct icon state.
  *
  * Architecture follows the universal pattern from
- * `.claude/rules/data-flywheel.md` §3 (Outcomes table) + §5
+ * `.claude/rules/reference/data-flywheel.md` §3 (Outcomes table) + §5
  * (Contribution UX flow).
  */
 

@@ -8,7 +8,7 @@
 -- Three changes, all idempotent:
 --   1. CREATE TABLE article_outcomes (+ enum, indexes, RLS, RPC, trigger).
 --      Per-(user, article) deduped state — heart of the personal flywheel
---      per .claude/rules/data-flywheel.md §3 + §9 Phase A. Companion to
+--      per .claude/rules/reference/data-flywheel.md §3 + §9 Phase A. Companion to
 --      the existing behavioral_events stream (which stays append-only
 --      for time-context analytics).
 --   2. ALTER source_suggestions ADD prompt_version (TEXT, nullable) —
@@ -50,7 +50,7 @@ create table if not exists public.article_outcomes (
   outcome             public.article_outcome_kind not null default 'no_action',
   rating              smallint check (rating between 1 and 5),
   worth_it            boolean,                -- the single most-important field
-                                              -- per data-flywheel.md §3
+                                              -- per reference/data-flywheel.md §3
   would_repeat        boolean,                -- "would I want more like this?"
   time_spent_seconds  integer
     check (time_spent_seconds between 0 and 86400),
@@ -72,7 +72,7 @@ create table if not exists public.article_outcomes (
 );
 
 comment on table public.article_outcomes is
-  'Per-(user, article) deduped outcome state. Phase 2+: input to per-user scoring weights. See .claude/rules/data-flywheel.md §3.';
+  'Per-(user, article) deduped outcome state. Phase 2+: input to per-user scoring weights. See .claude/rules/reference/data-flywheel.md §3.';
 
 -- ─── Indexes ─────────────────────────────────────────────────────────
 create index if not exists article_outcomes_user_idx

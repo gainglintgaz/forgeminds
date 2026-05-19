@@ -182,7 +182,18 @@
       "Bash(curl -fsSI \"https://www.climate.gov/rss/news-features\")",
       "Bash(curl -fsSI \"https://latent.space/feed\")",
       "Bash(curl -fsSI \"https://bensbites.beehiiv.com/feed\")",
-      "Bash(curl -fsSI \"https://rss.libsyn.com/shows/614850/destinations/5361860.xml\")"
+      "Bash(curl -fsSI \"https://rss.libsyn.com/shows/614850/destinations/5361860.xml\")",
+      "Bash(git push *)",
+      "Bash(git worktree *)",
+      "Bash(git rm *)",
+      "mcp__supabase-forgeminds__get_advisors",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "Bash(git check-ignore *)",
+      "Bash(mkdir -p C:/Users/vtbsj/victor-ai-factory/.claude/templates)",
+      "Read(//c/Users/vtbsj/victor-ai-factory/.claude/templates/**)",
+      "Bash(mkdir -p .claude/rules/reference)",
+      "Bash(git mv *)"
     ]
   }
 }
