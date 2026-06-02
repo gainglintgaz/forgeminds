@@ -49,12 +49,18 @@ export const MODELS = {
   /**
    * Google Gemini — score / categorize tasks (bulk, low-cost).
    *
-   * `gemini-2.0-flash` may be deprecated by Google in favor of
-   * `gemini-2.5-flash` per their roadmap. Pending: verify against
-   * Google's deprecation page and bump when confirmed. Conservative
-   * default for now to avoid breaking the score pipeline.
+   * 2026-05-31 BUG FIX: gemini-2.0-flash now returns 404 "no longer
+   * available to new users" — the score/categorize pipeline was dead
+   * for any new Gemini key. Confirmed via A/B smoke test (see
+   * docs/decisions/2026-05-31-ai-model-ab.md). Bumped to gemini-2.5-flash,
+   * which passed the smoke test + produced clean, fabrication-free briefs.
+   *
+   * NOTE: COSTS.GEMINI_* below still reflect 2.0-flash pricing
+   * ($0.075/$0.30). 2.5-flash pricing not yet provider-verified; cost
+   * logging will drift until reconciled (acceptable short-term per the
+   * header's emergency-rollback note). Reconcile when confirmed.
    */
-  GEMINI_FAST: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+  GEMINI_FAST: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
 
   /**
    * Anthropic Claude Sonnet — onboarding agent, brief synthesis,
