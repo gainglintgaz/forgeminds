@@ -54,11 +54,10 @@ export const MODELS = {
    * for any new Gemini key. Confirmed via A/B smoke test (see
    * docs/decisions/2026-05-31-ai-model-ab.md). Bumped to gemini-2.5-flash,
    * which passed the smoke test + produced clean, fabrication-free briefs.
+   * (Google later shut 2.0-flash down entirely on 2026-06-01.)
    *
-   * NOTE: COSTS.GEMINI_* below still reflect 2.0-flash pricing
-   * ($0.075/$0.30). 2.5-flash pricing not yet provider-verified; cost
-   * logging will drift until reconciled (acceptable short-term per the
-   * header's emergency-rollback note). Reconcile when confirmed.
+   * COSTS.GEMINI_* reconciled to 2.5-flash pricing 2026-06-04 — see the
+   * sourced comment in COSTS below.
    */
   GEMINI_FAST: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
 
@@ -119,9 +118,16 @@ export const COSTS = {
   GROK_INPUT_PER_M: 1.25,
   GROK_OUTPUT_PER_M: 2.5,
 
-  // Google gemini-2.0-flash.
-  GEMINI_INPUT_PER_M: 0.075,
-  GEMINI_OUTPUT_PER_M: 0.3,
+  // Google gemini-2.5-flash (paid tier, standard): $0.30/1M input
+  // (text/image/video; audio is $1.00 — we only send text), $2.50/1M
+  // output INCLUDING thinking tokens. Source:
+  // https://ai.google.dev/gemini-api/docs/pricing (verified 2026-06-04).
+  // Replaces stale constants ($0.075/$0.30) that predated the 2.5-flash
+  // bump — note those weren't even correct 2.0-flash pricing (2.0-flash
+  // was $0.10/$0.40 until its 2026-06-01 shutdown), so every prior
+  // score/categorize costEstimateUsd was understated ~4x in and ~8x out.
+  GEMINI_INPUT_PER_M: 0.3,
+  GEMINI_OUTPUT_PER_M: 2.5,
 
   // Anthropic claude-sonnet-4-6.
   SONNET_INPUT_PER_M: 3.0,
