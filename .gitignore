@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.example is placeholders-only and MUST be committed
+# (factory secrets-handling.md §6.2)
+!.env.example
 
 # vercel
 .vercel
