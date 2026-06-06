@@ -13,8 +13,14 @@ export async function createClient() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options);
+          try {
+            for (const { name, value, options } of cookiesToSet) {
+              cookieStore.set(name, value, options);
+            }
+          } catch {
+            // Called from a Server Component where cookies are read-only.
+            // Safe to ignore: middleware refreshes the session cookie.
+            // (Canonical @supabase/ssr Next.js pattern.)
           }
         },
       },
