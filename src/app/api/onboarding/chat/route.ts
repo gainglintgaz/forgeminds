@@ -148,13 +148,31 @@ export async function POST(request: NextRequest) {
         proposal_source: "onboarding_agent",
         rank_score: p.rankScore,
       }));
-      // Upsert behavior: the unique partial index
-      // source_suggestions_unique_pending_per_user prevents duplicate
-      // pending rows for the same (user, catalog_id). Use ON CONFLICT
-      // with the index columns to update reason + rank_score in place.
+      // Persist behavior: each intake run REPLACES the user's previous
+      // pending onboarding proposals, so /refine always shows exactly
+      // the latest run. Accepted/dismissed rows are preserved as
+      // history; the partial unique index
+      // (source_suggestions_unique_pending_per_user) remains the dedup
+      // backstop.
+      //
+      // Why not upsert: that index is PARTIAL (WHERE status='pending'
+      // AND catalog_id IS NOT NULL). Postgres can only target a partial
+      // index when ON CONFLICT repeats its WHERE predicate, which
+      // supabase-js `onConflict` cannot express — so the previous
+      // upsert failed with 42P10 on EVERY call and proposals were
+      // silently discarded (refine showed "No proposals yet").
+      const { error: clearError } = await service
+        .from("source_suggestions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .eq("proposal_source", "onboarding_agent");
+      if (clearError) {
+        console.error("[/api/onboarding/chat] pending-clear failed:", clearError);
+      }
       const { error: insertError } = await service
         .from("source_suggestions")
-        .upsert(rows, { onConflict: "user_id,catalog_id", ignoreDuplicates: false });
+        .insert(rows);
       if (insertError) {
         // Non-fatal: we still return proposals to the user. Log so we
         // can investigate persistence drift.
