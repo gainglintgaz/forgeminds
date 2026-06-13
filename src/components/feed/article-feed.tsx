@@ -57,6 +57,7 @@ export function ArticleFeed({ articles, loading }: ArticleFeedProps) {
       {articles.map((article) => (
         <ArticleCard
           key={article.id}
+          articleId={article.id}
           title={article.title}
           summary={article.summary || ""}
           url={article.url || "#"}

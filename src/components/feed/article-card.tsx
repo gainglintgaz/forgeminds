@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { SourceBadge } from "./source-badge";
+import { ArticleActions } from "./article-actions";
 
 // Renamed `description` → `summary` to match the canonical raw_articles
 // column name. UI-side prop is now schema-aligned end-to-end.
 interface ArticleCardProps {
+  articleId: string;
   title: string;
   summary: string;
   url: string;
@@ -15,6 +16,7 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({
+  articleId,
   title,
   summary,
   url,
@@ -64,17 +66,7 @@ export function ArticleCard({
             ))}
           </div>
         )}
-        <div className="flex gap-2 mt-4">
-          <Button size="sm" variant="outline" disabled>
-            Save to Brain
-          </Button>
-          <Button size="sm" variant="outline" disabled>
-            Analyze
-          </Button>
-          <Button size="sm" variant="outline" disabled>
-            Draft Post
-          </Button>
-        </div>
+        <ArticleActions articleId={articleId} />
       </CardContent>
     </Card>
   );

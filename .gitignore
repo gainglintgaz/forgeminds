@@ -24,7 +24,8 @@
 .DS_Store
 *.pem
 
-# debug
+# debug + deploy logs (may capture provider output/keys — never commit; secrets-handling.md §2.3)
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

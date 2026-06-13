@@ -1,48 +1,69 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SettingsForm, type SettingsValues } from "@/components/settings/settings-form";
 
-export const revalidate = 60;
+// Editable in Phase 1 — fetch fresh each load so a save round-trips visibly.
+export const dynamic = "force-dynamic";
 
 /**
- * Settings — Phase 1 read-only view of pipeline preferences.
- *
- * Shows the user's user_preferences row (the per-user knobs that drive the
- * cron dispatcher and route handlers — schedule, recency window, score
- * threshold, brief density, delivery channels). Phase 2 wraps each section
- * in an edit form. Phase 1 is read-only so we have something to look at
- * without building forms before the pipeline is proven to work.
+ * Settings — Phase 1 EDITABLE view over the existing user_preferences columns
+ * (design doc §R2.2). Account is read-only; everything else writes back via
+ * /api/settings. Source management + conversational config stay Phase 1b.
  */
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const userId = user?.id;
 
   const { data: prefs } = userId
     ? await supabase
         .from("user_preferences")
         .select(
-          "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, delivery_email, delivery_push, tracked_tickers, topics, excluded_topics, social_tone"
+          "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, weight_relevance, weight_impact, weight_novelty, weight_credibility, delivery_email, delivery_push, auto_generate_content, social_platforms, social_tone, topics, excluded_topics, tracked_tickers"
         )
         .eq("user_id", userId)
         .maybeSingle()
     : { data: null };
 
   const { data: profile } = userId
-    ? await supabase
-        .from("profiles")
-        .select("display_name, tier, timezone, created_at")
-        .eq("user_id", userId)
-        .maybeSingle()
+    ? await supabase.from("profiles").select("display_name, tier, created_at").eq("user_id", userId).maybeSingle()
     : { data: null };
+
+  const p = (prefs ?? {}) as Partial<SettingsValues>;
+  const initial: SettingsValues = {
+    timezone: p.timezone ?? "America/New_York",
+    cadence_minutes: p.cadence_minutes ?? 30,
+    active_hours_start: p.active_hours_start ?? 7,
+    active_hours_end: p.active_hours_end ?? 23,
+    active_days: p.active_days ?? ["mon", "tue", "wed", "thu", "fri"],
+    recency_window_minutes: p.recency_window_minutes ?? 120,
+    score_lookback_minutes: p.score_lookback_minutes ?? 240,
+    min_composite_score: p.min_composite_score ?? 0.45,
+    max_articles_per_brief: p.max_articles_per_brief ?? 15,
+    max_per_category: p.max_per_category ?? 3,
+    max_per_entity: p.max_per_entity ?? 2,
+    weight_relevance: p.weight_relevance ?? 0.3,
+    weight_impact: p.weight_impact ?? 0.3,
+    weight_novelty: p.weight_novelty ?? 0.2,
+    weight_credibility: p.weight_credibility ?? 0.2,
+    delivery_email: p.delivery_email ?? true,
+    delivery_push: p.delivery_push ?? false,
+    auto_generate_content: p.auto_generate_content ?? false,
+    social_platforms: p.social_platforms ?? [],
+    social_tone: p.social_tone ?? "professional",
+    topics: p.topics ?? [],
+    excluded_topics: p.excluded_topics ?? [],
+    tracked_tickers: p.tracked_tickers ?? [],
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Read-only view of your pipeline preferences. Edit forms ship in Phase 2.
-        </p>
+        <p className="text-sm text-zinc-500 mt-1">Edit your pipeline preferences. Changes save to your account.</p>
       </div>
 
       <Card className="mb-4">
@@ -67,129 +88,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-base">Pipeline schedule</CardTitle>
-          <CardDescription>
-            When and how often the news pipeline runs for you. Driven by the
-            pg_cron dispatcher (see migration 20260501000001).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Timezone</dt>
-            <dd>{prefs?.timezone ?? "America/New_York"}</dd>
-            <dt className="text-zinc-500">Cadence</dt>
-            <dd>Every {prefs?.cadence_minutes ?? 30} minutes</dd>
-            <dt className="text-zinc-500">Active hours</dt>
-            <dd>
-              {prefs?.active_hours_start ?? 7}:00 – {prefs?.active_hours_end ?? 23}:00 ({prefs?.timezone ?? "local"})
-            </dd>
-            <dt className="text-zinc-500">Active days</dt>
-            <dd>{(prefs?.active_days ?? ["mon", "tue", "wed", "thu", "fri"]).join(", ")}</dd>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-base">Pipeline windows</CardTitle>
-          <CardDescription>
-            How far back each pipeline step looks for work to do.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Recency window</dt>
-            <dd>{prefs?.recency_window_minutes ?? 120} minutes (ingest dedup horizon)</dd>
-            <dt className="text-zinc-500">Score lookback</dt>
-            <dd>{prefs?.score_lookback_minutes ?? 240} minutes (how far back to grab unscored)</dd>
-            <dt className="text-zinc-500">Min composite score</dt>
-            <dd>{prefs?.min_composite_score ?? 0.45} (0-1 scale; below this article doesn&apos;t make brief)</dd>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-base">Brief density</CardTitle>
-          <CardDescription>How big and diverse each brief is.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Max articles per brief</dt>
-            <dd>{prefs?.max_articles_per_brief ?? 15}</dd>
-            <dt className="text-zinc-500">Max per category</dt>
-            <dd>{prefs?.max_per_category ?? 3}</dd>
-            <dt className="text-zinc-500">Max per entity</dt>
-            <dd>{prefs?.max_per_entity ?? 2}</dd>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-base">Delivery</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Email digests</dt>
-            <dd>
-              {prefs?.delivery_email ? (
-                <Badge variant="default">Enabled</Badge>
-              ) : (
-                <Badge variant="secondary">Disabled</Badge>
-              )}
-            </dd>
-            <dt className="text-zinc-500">Push notifications</dt>
-            <dd>
-              {prefs?.delivery_push ? (
-                <Badge variant="default">Enabled</Badge>
-              ) : (
-                <Badge variant="secondary">Disabled</Badge>
-              )}
-            </dd>
-            <dt className="text-zinc-500">Social tone</dt>
-            <dd>{prefs?.social_tone ?? "professional"}</dd>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle className="text-base">Topics &amp; tickers</CardTitle>
-          <CardDescription>
-            What you&apos;re tracking. Phase 2 adds editing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Topics</dt>
-            <dd>
-              {prefs?.topics && prefs.topics.length > 0
-                ? prefs.topics.join(", ")
-                : <span className="text-zinc-400">none yet</span>}
-            </dd>
-            <dt className="text-zinc-500">Tracked tickers</dt>
-            <dd className="font-mono">
-              {prefs?.tracked_tickers && prefs.tracked_tickers.length > 0
-                ? prefs.tracked_tickers.map((t: string) => `$${t}`).join("  ")
-                : <span className="text-zinc-400">none yet</span>}
-            </dd>
-            <dt className="text-zinc-500">Excluded topics</dt>
-            <dd>
-              {prefs?.excluded_topics && prefs.excluded_topics.length > 0
-                ? prefs.excluded_topics.join(", ")
-                : <span className="text-zinc-400">none</span>}
-            </dd>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <p className="text-xs text-zinc-400 mt-6">
-        Phase 1 ships read-only. Phase 2 wraps each section in an edit form
-        backed by the same `user_preferences` row.
-      </p>
+      <SettingsForm initial={initial} />
     </div>
   );
 }
