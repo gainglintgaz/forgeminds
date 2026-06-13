@@ -45,3 +45,32 @@
 - `ab-brief-models-v2.ts` — 8-model × 4-input matrix
 
 Kept for re-running when new models ship. Not production code.
+
+---
+
+## Round 3 — Gemini 3.1 Pro re-test (2026-06-04)
+
+> **Trigger:** Gemini 3.1 Pro (`gemini-3.1-pro-preview`) shipped as the replacement for the deprecated 3.0/3-pro line. Re-ran the full 8-model × 4-input matrix (`ab-brief-models-v2.ts`) to judge whether it earns a Silver/Gold tier slot. GPT-5.5 disabled (max_tokens 400 in smoke test).
+> **Method:** same harness + production `generate-brief` prompt. Smoke test first: 8/9 providers authenticated (only GPT-5.5 failed).
+> **Decided by:** Claude diagnostic session; verdict surfaced to Victor.
+> **Actual cost of the run:** ~$0.24 (full 8-model matrix incl. Opus, not just 3.1 Pro).
+
+### Verdict: Gemini 3.1 Pro — **REJECTED. No router change. Sonnet 4.6 stays `generate-brief`.**
+
+Three independent disqualifiers:
+
+1. **Editorializes facts not in source (hard fail vs no-invention rule).** Every output forces an "engineering LARP" persona that injects framing absent from the articles: *"Let's review today's system state,"* *"public ownership is a bug, not a feature,"* *"the retaliation loop executes as expected,"* *"the legacy systems remain unpatched,"* *"telemetry shows 246 cases,"* *"a localized failure rather than a global outage."* Same failure class that disqualified Grok 4.3 + Gemini 3.5 Flash in round 1.
+2. **Truncated to invalid JSON on 2 of 4 inputs.** Verbose persona preamble consumes the 2000-token budget → JSON cut mid-string → `parseBriefResponse` returns null → brief fails. ~50% failure rate.
+3. **Slowest by 2–8×.** Avg 29,169 ms vs Sonnet 14,559 ms, Haiku 3,441 ms. Unfit for a per-user cron pipeline.
+
+Cost was mid-pack ($0.0058/call) — cheaper than Sonnet but more than Haiku/2.5-Flash — but speed + fidelity + reliability all worse than the cheaper clean options. No tier wants it.
+
+### Secondary confirmations from the same run
+
+- **Haiku 4.5** — excellent Free-tier pick: 3.4 s, $0.0023/call, faithful, clean JSON (strips its own markdown fences fine). Validates the parked tiering spec's Free = Haiku choice.
+- **Gemini 2.5 Flash** — fastest faithful option ($0.0016/call); confirms its `score`/`categorize` slot.
+- **Grok 4.3** — improved (no narration leak this run, faithful, $0.002) but choppy one-sentence-per-paragraph style; still not better than Sonnet for the voice. Stays out.
+- **Perplexity sonar** — STILL fabricates: injected "Bundibugyo strain," "Ituri Province," "8 lab-confirmed cases," `[1][4]` citation markers — live web facts not in the source. Round-1 ban holds. One call also hard-failed (`fetch failed`).
+- **Opus 4.8** — runs long, 2× Sonnet cost, no quality win for this task. Gold-reserve only, as already decided.
+
+**Net:** round 3 *validates* the existing tiering rather than changing it. Re-test again only when a genuinely new frontier model ships.

@@ -60,6 +60,30 @@
 - **Unlock trigger:** Before alpha launch.
 - **Complexity:** Medium (probably 80% there; the last 20% is UX polish + error paths).
 
+### T0.6 — Auto tone: content-adaptive register (status: DISCUSSED, founder 2026-06-10)
+- **Vision:** Add **"Auto — match the tone to the story"** as a tone option (arguably the default). A fixed tone is wrong for part of every brief: a scandal wants *investigative*, a Fed decision wants *analytical*, breaking news wants *concise*. In auto mode the model picks the register **per item** based on content type, while **style anchors stay fixed** (anchors = whose voice; tone = register — auto varies register only, never abandons the anchors).
+- **Founder framing (verbatim, 2026-06-10):** "tone should probably also be an option to automatically pick if needed the ones that most fits the story, news, analysis, report, etc."
+- **Why moat:** Deepens the Voice DNA promise from "one voice setting" to "your writers' voice, correctly modulated per story" — the thing a human editor does. Pure prompt-level intelligence; zero extra AI calls or cost.
+- **Implementation sketch (sized against live code/DB 2026-06-10):**
+  1. Migration: relax `user_preferences_style_tone_check` CHECK to include `'auto'` (constraint verified live; one ALTER).
+  2. `StyleTone` union (`src/lib/pipeline/user-prefs.ts:47`): add `"auto"`.
+  3. Style form (`style-capture-form.tsx`): 6th tone card — "Auto (recommended) — investigative for scandals, analytical for markets, concise for breaking news."
+  4. Generate route `buildStylePrefix`: `auto` branch emits an adaptive-tone instruction (choose register per item from the 5 named registers based on the item's content type; anchors unchanged).
+  5. Bump `GENERATE_PROMPT_VERSION` → `generate-v0.3`.
+- **Complexity:** Low (~40 lines + 1 small migration). Sonnet-grade.
+- **Timing constraint (hard):** ship **pre-alpha or post-alpha, NEVER mid-alpha** — changing generation style mid-run contaminates the week-1 vs week-4 Voice-DNA relevance measurement (`GOAL.md` §3.1).
+- **Unlock trigger:** founder approval to bundle with the pre-alpha fix batch (onboarding-persist 42P10 + source-health NULL), or first post-alpha batch.
+
+### T0.7 — Rich source discovery: catalog depth + browse/filter inside onboarding (status: DISCUSSED, founder 2026-06-10)
+- **Founder feedback (live-driving refine step):** AI picks are fine but a closed list — no categories, no per-topic quotas ("show me 5-10 AI + 5-10 economic + 5-10 markets"), no "see more options," no source-KIND labels (government report / fund-manager analysis / financial filing / newspaper / blog / social / API feed). Paywall badges exist but are weak. His prior Pipedream pipeline had richer diversity (10 finance RSS feeds + Finnhub/Benzinga/Alpaca/AlphaVantage APIs + X posts).
+- **Verified gaps (2026-06-10):**
+  1. **Catalog depth:** 9 of his 10 Pipedream RSS feeds are NOT in `source_catalog` (only Fed present). **Zero `type='api'` catalog rows exist** despite fully-built fetchers in `src/lib/pipeline/ingest/` — the API engine is wired but unreachable (buried-built class). No social/X rows either.
+  2. **Discovery UX:** the catalog browser (search + paywall filters) EXISTS on `/sources` but is not surfaced in the onboarding refine step; no category grouping/quotas/see-more anywhere; no source-kind taxonomy labels on cards.
+- **Split into two work items:**
+  - **(a) Catalog seeding — cheap, no UI, can run anytime:** `source-catalog-curator` agent seeds his 10 Pipedream feeds + `api`-type rows for Finnhub/Benzinga/Alpaca/AlphaVantage (+ X/social when X ingest ships) with full metadata (category, subcategory, paywall, source_kind). Output: SQL inserts, validated URLs.
+  - **(b) Discovery UX redesign — designed feature, discovery protocol required:** refine step gains category sections with per-topic counts, "see more in this category" (pulls from catalog RAG beyond the AI's first pick), source-kind labels, and embeds the existing catalog browser as the power-user path. Touches onboarding UI + agent response shape.
+- **Timing:** (a) anytime (data-only). (b) post-deploy, pre- or post-alpha per founder; NOT mid-alpha (changes onboarding the §3.2 hostile-user test measures).
+
 ---
 
 ## T1 — After alpha proof (Voice-DNA-ranking delta ≥ +10 pp)
@@ -111,6 +135,20 @@
 - **Unlock trigger:** Community Brain hits its first k=5 cohort.
 - **Audit reference:** Audit Section 8 item #7.
 - **Complexity:** Medium (aggregator query + UI badge).
+
+### T1.7 — Listen to your briefs: private podcast feed + produced audio/video (status: DISCUSSED, founder 2026-06-13)
+- **Founder framing (verbatim, 2026-06-13):** "some might prefer briefs to be read to them on a walk or a car… each morning or evening or when scheduled to also have an option to listen to briefs or summaries or articles… an option in what voice, tone, style (radio or news broadcaster or blogger or podcaster, etc) and at what speed and any music or effects overlay, or even video if needed."
+- **Vision:** A delivery CHANNEL, not just a feature: ForgeMinds generates an audio version of a brief/summary/article on the user's schedule (morning/evening/cadence) and exposes a **per-user authenticated private podcast RSS feed**. The user adds the feed once to Apple Podcasts / Spotify / Overcast; scheduled episodes then appear automatically and they listen hands-free on a walk or drive. Plus on-demand "listen" + download in-app.
+- **Configurable (Rule 55, per-user):** voice, **register/style** (news-broadcaster / radio-host / podcaster / blogger / calm-explainer), speed, intro/outro music + effects overlay (on/off + pack), length (full brief vs digest). Ties directly into Voice DNA (`style_*`) — audio is Voice DNA made audible. Schema already anticipates it: `content_type` enum has `podcast_script` + `video_prompt`.
+- **Why moat:** Daily-habit retention driver (people don't open an app on a walk, but a podcast episode plays itself) + extends Voice DNA from text to voice (harder to clone). Distribution channel that compounds with the personalization moat rather than being mere surface (cf. anti-pattern #3 — this is gated to ride ON the moat, not substitute for it).
+- **Complexity sub-tiers (ship escalating, gate each on cost proof):**
+  1. **Read-aloud (T1-able):** TTS of the brief via a provider (OpenAI/Google/ElevenLabs stock voices — NO voice cloning) → store audio in R2/Supabase Storage → in-app player + the private RSS feed. Voice + speed + style-via-prompt-shaped-script. Medium.
+  2. **Produced podcast (T2/T3):** `podcast_script` content type → intro/outro music + effects + optional multi-voice → a real "show." High.
+  3. **Video (T3+, speculative):** `video_prompt` content type → generated video. Very high cost/complexity; clearly latest.
+- **Cost + safety (hard constraint):** TTS and especially video are real per-use external costs → governed by VIBE Rule 21 (hard token/cost budgets) + the cost-aware router (T1.4) + per-tier metering; refuse-to-generate above the user/tier budget. Provider STOCK voices only in V1 (custom-voice cloning has consent/legal exposure — defer). Audio is an AI-output artifact → carries `prompt_version` + source traceability like any other.
+- **Prerequisites:** Core brief delivery loop live (T0.2); the scheduling dispatcher already exists (`user_preferences` schedule + pg_cron) so "each morning/evening" is just a new delivery channel on the existing schedule; (for voice-DNA-styled audio) Voice DNA. Storage bucket + a TTS provider wired through `model-router.json`.
+- **Unlock trigger:** After Phase 1 (the configurable+actionable core) ships and the brief loop is proven; read-aloud MVP can be an early delivery-channel add, the produced/video tiers gate on cost proof + paid tiers.
+- **Complexity:** Read-aloud Medium; produced High; video Very high. ← promote candidate (read-aloud tier) once Phase 1 lands.
 
 ---
 

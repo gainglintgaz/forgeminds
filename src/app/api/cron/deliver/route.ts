@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { render } from "@react-email/render"; // static — unresolvable = BUILD failure, not silent runtime throw
 import { createServiceClient } from "@/lib/supabase/server";
 import { DailyBriefEmail } from "@/lib/email/templates/daily-brief";
 import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
@@ -45,9 +46,11 @@ async function resolveRecipient(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   brief: BriefForDelivery
 ): Promise<RecipientProfile | null> {
-  // System pseudo-user → use RESEND_FROM_EMAIL fallback.
+  // System pseudo-user (unreachable today — briefs.user_id is a NOT NULL FK to auth.users;
+  // kept for the legacy system-pipeline path). RESEND_FROM_EMAIL is currently
+  // onboarding@resend.dev (NOT a real inbox), so prefer the test override when set.
   if (brief.user_id === SYSTEM_USER_ID) {
-    const fallback = process.env.RESEND_FROM_EMAIL;
+    const fallback = process.env.RESEND_TEST_RECIPIENT ?? process.env.RESEND_FROM_EMAIL;
     if (!fallback) return null;
     const email = fallback.match(/<([^>]+)>/)?.[1] ?? fallback;
     return { user_id: SYSTEM_USER_ID, email, display_name: "there" };
@@ -73,9 +76,22 @@ async function resolveRecipient(
     .eq("user_id", brief.user_id)
     .maybeSingle();
 
+  // DEV-ONLY override — REMOVE at launch (tracked: PENDING_APPROVALS "Email E2 launch checklist",
+  // design doc docs/architecture/email-delivery.md §9). Resend testing mode (no verified ForgeMinds
+  // domain) only delivers to the Resend account owner's address. SCOPED to the founder test user:
+  // a global override would redirect other users' brief content to a personal inbox (leak class).
+  const TEST_USER_ID = "3707759d-9863-4f69-a6d8-f40036fa15f1";
+  const testRecipient = process.env.RESEND_TEST_RECIPIENT;
+  if (testRecipient && brief.user_id !== TEST_USER_ID) {
+    console.error(
+      `[Deliver] RESEND_TEST_RECIPIENT is set but brief ${brief.id} belongs to a different user — skipping (fail-closed)`
+    );
+    return null;
+  }
+
   return {
     user_id: brief.user_id,
-    email: user.user.email,
+    email: testRecipient && brief.user_id === TEST_USER_ID ? testRecipient : user.user.email,
     display_name: profile?.display_name ?? null,
   };
 }
@@ -169,8 +185,8 @@ export async function GET(request: Request) {
       try {
         const subject = `${brief.title} — ${brief.brief_date}`;
 
-        // Render the React Email template. Resend renders the React tree
-        // server-side into MIME html + plain text on the wire.
+        // Render the React Email template to html in-route (static import — build fails
+        // if unresolvable). Resend receives pre-rendered html, never a react payload.
         const reactEl = DailyBriefEmail({
           recipientName: recipient.display_name ?? "there",
           briefTitle: brief.title,
@@ -179,19 +195,27 @@ export async function GET(request: Request) {
           articleCount: brief.article_count ?? 0,
           tickerSymbols: brief.ticker_symbols ?? [],
           categoriesCovered: brief.categories_covered ?? [],
-          briefUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://forgeminds.app"}/briefs/${brief.id}`,
+          // E1: host hardcoded to the live Worker URL — no NEXT_PUBLIC_APP_URL dependency
+          // (skips the .env.local gate; can't ship a dead localhost link). Per founder + desktop
+          // session. E2 swaps this to the real domain (design doc §3.E2).
+          briefUrl: `https://forgeminds.vctrbbnv.workers.dev/briefs/${brief.id}`,
         }) as ReactElement;
 
-        const { data: sendData, error: sendErr } = await resend.emails.send({
-          from: fromAddr,
-          to: recipient.email,
-          subject,
-          react: reactEl,
-          text: brief.summary_text ?? brief.title,
-        });
+        const html = await render(reactEl);
+
+        const { data: sendData, error: sendErr } = await resend.emails.send(
+          {
+            from: fromAddr,
+            to: recipient.email,
+            subject,
+            html,
+            text: brief.summary_text ?? brief.title,
+          },
+          { idempotencyKey: `brief/${brief.id}` } // provider-side dedup, 24h window (SDK v6 supports this)
+        );
 
         if (sendErr) {
-          console.error(`[Deliver] Resend error for ${recipient.email}:`, sendErr.message);
+          console.error(`[Deliver] Resend error for brief ${brief.id} user ${recipient.user_id.slice(0, 8)}:`, sendErr.message);
           await supabase.from("delivery_log").insert({
             user_id: recipient.user_id,
             brief_id: brief.id,
@@ -205,7 +229,7 @@ export async function GET(request: Request) {
           continue;
         }
 
-        await supabase.from("delivery_log").insert({
+        const { error: sentLogErr } = await supabase.from("delivery_log").insert({
           user_id: recipient.user_id,
           brief_id: brief.id,
           delivery_type: "email_digest",
@@ -214,8 +238,17 @@ export async function GET(request: Request) {
           provider: "resend",
           provider_message_id: sendData?.id ?? null,
         });
+        if (sentLogErr) {
+          if (sentLogErr.code === "23505") {
+            // unique index delivery_log_sent_once — this brief already has a sent row
+            // (e.g. prior tick crashed between send and update). Treat as already-sent (VIBE 37).
+            console.warn(`[Deliver] brief ${brief.id}: sent row already exists — continuing to is_delivered update`);
+          } else {
+            console.error(`[Deliver] delivery_log sent-row write failed for brief ${brief.id}:`, sentLogErr.message);
+          }
+        }
 
-        await supabase
+        const { error: updErr } = await supabase
           .from("briefs")
           .update({
             is_delivered: true,
@@ -223,10 +256,29 @@ export async function GET(request: Request) {
             delivery_method: "email",
           })
           .eq("id", brief.id);
+        if (updErr) {
+          // CRITICAL path: email is out but the gate didn't flip. Next tick retries the brief;
+          // the idempotency key makes the re-send a provider no-op and the unique index makes
+          // the re-log a 23505. No duplicate email can reach the inbox.
+          console.error(`[Deliver] brief ${brief.id}: sent but is_delivered update FAILED — will retry next tick:`, updErr.message);
+          failedCount++;
+          continue;
+        }
 
         sentCount++;
       } catch (err) {
-        console.error(`[Deliver] Send failed for ${recipient.email}:`, (err as Error).message);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[Deliver] send failed for brief ${brief.id} user ${recipient.user_id.slice(0, 8)}:`, msg);
+        const { error: logErr } = await supabase.from("delivery_log").insert({
+          user_id: recipient.user_id,
+          brief_id: brief.id,
+          delivery_type: "email_digest",
+          recipient: recipient.email,
+          status: "failed",
+          provider: "resend",
+          error_message: msg.slice(0, 500),
+        });
+        if (logErr) console.error(`[Deliver] delivery_log write failed for brief ${brief.id}:`, logErr.message);
         failedCount++;
       }
     }

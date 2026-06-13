@@ -39,6 +39,7 @@
     "@base-ui/react": "^1.4.0",
     "@opennextjs/cloudflare": "^1.19.11",
     "@react-email/components": "^0.0.32",
+    "@react-email/render": "1.0.4",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "class-variance-authority": "^0.7.1",
