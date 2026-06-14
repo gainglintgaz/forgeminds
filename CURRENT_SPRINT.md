@@ -4,6 +4,25 @@
 
 ---
 
+## 🔁 2026-06-14 DRAWING-BOARD RESET — supersedes the Phase 2 plan below
+
+The active path is now the founder-APPROVED finance-core V1 in
+`docs/architecture/forgeminds-v1-finance-core.md` (Appendix B slices S1→S7).
+The Phase 2 closed-alpha content below remains valid intent but is paused
+behind the slice sequence (S7 = the dogfood/alpha week).
+
+**Slice status (build in thin, founder-reviewed slices):**
+- [x] **S1 — Make the AI fire + telemetry gate** — DONE 2026-06-14, pending founder review.
+  - Verified diagnosis: generate DID fire (claude) but curate re-runs clobbered its `generation_model` → 'heuristic' (mislabel), and `ai_calls_made`/`ai_tokens_used` were never written (telemetry invisible). Dispatcher also stalled after 06-13.
+  - Fixes: curate seam (no clobber); telemetry columns written on score+generate; fail-loud 0-AI-call watchdog; `GET /api/ops/ai-telemetry`.
+  - Proof (dev, user 3707759d, 06-14): score 1582 tok + generate 1830 tok today; brief `generation_model=claude-sonnet-4-6`. Commits `fce39ef` + `3af7400`.
+- [ ] **S2 — Finance personalization + strict resolution** (NOT started; awaits founder go-ahead). Seed topics/tracked_tickers; resolve categories/tickers to DB UUIDs (≥3 real categories, fixes ERR-021/020); cross-brief dedup (ERR-024). Needs a migration (canonical categories + seeded aliases).
+- [ ] S3 enrich · S4 WF2 outputs · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
+
+**Known still-open (not S1 scope):** dispatcher restart on a working host (S6 Railway; Cloudflare deploy is broken per ERR-026), empty personalization (S2), single 'core' category (S2), `sources.last_fetched_at` never updated (ERR-025 ops follow-up).
+
+---
+
 ## 🟢 ACTIVE PHASE — Phase 2: PROVE THE LOOP (closed alpha)
 
 **Locked:** 2026-05-16 (re-scoped from earlier "Phase 2: Pipeline End-to-End" after the 51/100 strategic audit)
