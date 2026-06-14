@@ -103,24 +103,71 @@ export async function GET(request: Request) {
     const articleIds = curated.map((c) => c.articleId);
     const categoriesCovered = Array.from(new Set(curated.map((c) => c.category)));
 
-    const { error } = await supabase.from("briefs").upsert(
-      {
+    // ── LOAD-BEARING SEAM (ERR-019 fix) ──────────────────────────────────
+    // curate OWNS the article selection; generate OWNS the AI summary +
+    // generation_model/prompt_version. The old blanket upsert re-stamped
+    // generation_model='heuristic' + prompt_version='curator-v0.1' on EVERY
+    // tick — clobbering generate's claude label (06-10/11/12 briefs were
+    // AI-written, then mislabeled 'heuristic' by a later curate re-run, which
+    // is what made it look like "the AI never ran").
+    // Fix: a re-run updates ONLY curation fields and NEVER touches
+    // generation_model / prompt_version / summary_html / summary_text. A NEW
+    // brief inserts with the heuristic placeholder + summary_html=NULL so the
+    // generate step (which selects `summary_html IS NULL`) picks it up.
+    const curationFields = {
+      article_ids: articleIds,
+      ticker_symbols: [] as string[],
+      article_count: curated.length,
+      categories_covered: categoriesCovered,
+    };
+
+    const { data: existing, error: existErr } = await supabase
+      .from("briefs")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("brief_type", "daily")
+      .eq("brief_date", briefDate)
+      .maybeSingle();
+
+    if (existErr) {
+      console.error(`[Curate] Brief lookup failed: ${existErr.message}`);
+    }
+
+    if (existing?.id) {
+      // Existing brief → preserve generate's AI output; update curation only.
+      const { error } = await supabase
+        .from("briefs")
+        .update(curationFields)
+        .eq("id", existing.id);
+      if (error) console.error(`[Curate] Brief update failed: ${error.message}`);
+    } else {
+      // New brief → insert with heuristic placeholder; summary_html stays NULL
+      // (DB default) so generate will synthesize it.
+      const { error } = await supabase.from("briefs").insert({
         user_id: userId,
         title: `Daily Brief — ${briefDate}`,
         brief_type: "daily",
         brief_date: briefDate,
-        article_ids: articleIds,
-        ticker_symbols: [],
-        article_count: curated.length,
-        categories_covered: categoriesCovered,
+        ...curationFields,
         generation_model: CURATOR_GENERATION_MODEL,
         prompt_version: CURATOR_PROMPT_VERSION,
-      },
-      { onConflict: "user_id,brief_type,brief_date" }
-    );
-
-    if (error) {
-      console.error(`[Curate] Brief save failed: ${error.message}`);
+      });
+      if (error) {
+        // Race: a concurrent curate tick created the row first (unique
+        // user_id,brief_type,brief_date). 23505 = already saved (VIBE Rule 37)
+        // → fall back to a curation-only update, still preserving AI fields.
+        if (error.code === "23505") {
+          const { error: updErr } = await supabase
+            .from("briefs")
+            .update(curationFields)
+            .eq("user_id", userId)
+            .eq("brief_type", "daily")
+            .eq("brief_date", briefDate);
+          if (updErr) console.error(`[Curate] Brief update-after-conflict failed: ${updErr.message}`);
+        } else {
+          console.error(`[Curate] Brief insert failed: ${error.message}`);
+        }
+      }
     }
 
     // Mark this user's scored_articles as is_curated so the dashboard prefers them.
