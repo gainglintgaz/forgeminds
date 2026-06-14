@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ERR-019",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "pipeline",
+    "symptom": "Daily briefs read as a dumb heuristic RSS digest; founder called the product worse than his Pipedream finance flow.",
+    "root_cause": "pipeline_runs telemetry shows score/curate/enrich/generate made 0 AI calls across 80+ runs. The code DOES call routeAIRequest in score/route.ts and generate/route.ts, but generate processed 0 items (never picked up the briefs curate created), so briefs kept generation_model='heuristic'. An integration-seam + stale-deploy + cron-stall failure, not 'the AI is bad'.",
+    "fix": "Diagnose and fix the curate->generate hand-off (generate must select the briefs curate wrote); confirm the deployed build matches the wired code; restart the stalled dispatcher.",
+    "golden_rule": "A step reporting status='completed' is not proof it did its job. Gate the Definition of Done on runtime telemetry (ai_calls_made > 0) plus a human-rated real output. See lessons.md #104."
+  },
+  {
+    "id": "ERR-020",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "personalization",
+    "symptom": "Briefs served irrelevant generic world news (e.g. Australian NDIS policy) to a US finance-focused user.",
+    "root_cause": "user_preferences.topics, tracked_tickers, excluded_topics are all []. With no per-user relevance anchor, two high-volume generic feeds (BBC World, Guardian World) dominated the 13 finance/econ/AI feeds. The differentiator (personalization) was never populated, yet features were stacked on top of it.",
+    "fix": "Seed and wire the per-user interest graph (topics + tracked_tickers) so relevance scoring has a real anchor; down-rank generic feeds for a focused user.",
+    "golden_rule": "Prove the core differentiator end-to-end on one real user (measured) BEFORE building any peripheral feature. An empty load-bearing layer = a hollow moat. See lessons.md #106, wired-not-orphaned.md."
+  },
+  {
+    "id": "ERR-021",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "ai-resolution",
+    "symptom": "Every brief showed 'N stories . core' with no real categories; all 184 scored articles fell in diversity_category='core'.",
+    "root_cause": "No strict resolution layer: the scoring/curation step never classifies into a real taxonomy mapped to DB rows; everything defaults to one 'core' bucket. AI category/entity outputs are not resolved to existing DB UUIDs.",
+    "fix": "Add a strict resolution layer: the model may only output category/entity IDs that exist in the DB; on a miss, flag-for-review (do not blind-insert) and retry.",
+    "golden_rule": "AI hallucinates strings; databases require relations. Resolve every AI-extracted category/entity to an existing DB UUID before insert; an invented value fails the run. See lessons.md #105, VIBE Rule 24."
+  },
+  {
+    "id": "ERR-022",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "dead-ui",
+    "symptom": "On the brief page Save flips to 'Saved' but there is nowhere to find saved items; Dismiss flips but the article stays; 'Took action' flips but nothing happens.",
+    "root_cause": "article_outcomes rows are written (saved/dismissed/action_taken) but saved_items=0 (Save has no destination surface), the list is not re-filtered on dismiss, and action_taken has no downstream consumer. Outcome buttons write data with no visible effect.",
+    "fix": "Wire a saved-items destination page; remove dismissed items from the view; give 'action' a real downstream (draft/act). No dead UI: every button works or is removed.",
+    "golden_rule": "A button that writes a row but produces no visible effect is dead UI and destroys trust. Wire it to a destination/consumer or remove it. See VIBE Rule 51."
+  },
+  {
+    "id": "ERR-023",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "data-quality",
+    "symptom": "Per-article summaries cut off mid-sentence ('...who believ'); scored_articles.one_line_summary is NULL on every row.",
+    "root_cause": "The scoring step never populates one_line_summary, so the surface falls back to a truncated raw snippet. Combined with ERR-019 (AI generation never ran) the brief shows truncated, un-synthesized text.",
+    "fix": "Populate a substring-validated one_line_summary during scoring/generation; render full synthesized text, not a truncated raw snippet.",
+    "golden_rule": "Never render a truncated raw snippet as if it were a summary. Produce (and validate) the digest field the UI reads."
+  },
+  {
+    "id": "ERR-024",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "dedup",
+    "symptom": "The same article ('States tell Albanese government...NDIS') was served in BOTH the 06-10 and 06-11 briefs.",
+    "root_cause": "Ingest dedups within a fetch (content_hash) but there is no cross-brief dedup: an article already delivered in a prior brief can be selected again. The 'second time' scenario was not handled at the curation layer.",
+    "fix": "Track already-delivered article_ids per user and exclude them from subsequent curation (or down-weight), so a story is not re-served across briefs.",
+    "golden_rule": "Design the second-time scenario for every user-facing surface, not just first use. Within-batch dedup is not cross-time dedup."
+  },
+  {
+    "id": "ERR-025",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "observability",
+    "symptom": "No brief generated after 2026-06-13; sources.last_fetched_at is NULL on all 15 sources though 193 raw_articles exist.",
+    "root_cause": "The pg_cron dispatcher effectively stalled (~36h gap) with no alert; ingest writes raw_articles but never updates sources.last_fetched_at, so source health reports 'healthy' while stale (a health lie). No self-audit watched the pipeline telemetry.",
+    "fix": "Add an ops/self-audit check on pipeline_runs (alert if a step makes 0 AI calls for N hours, delivery fails, or a brief has <N items); update sources.last_fetched_at on every fetch.",
+    "golden_rule": "Instrument the pipeline to flag its own silence. A stalled cron + a 'healthy' source lie are invisible without a telemetry watchdog."
+  },
+  {
+    "id": "ERR-026",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "infra",
+    "symptom": "Every route threw ChunkLoadError at runtime on Cloudflare Workers; had to force a webpack build in open-next config.",
+    "root_cause": "Next.js (Turbopack server chunks) + OpenNext on the Cloudflare Workers workerd runtime is a poor fit for heavy Node/AI-SDK server code; Workers' CPU/memory limits and chunk loading break the AI pipeline. The app deviated from the originally-intended Vercel target.",
+    "fix": "Move the Next.js app off Cloudflare Workers; host on a full Node runtime (Railway chosen) with Supabase as the host-independent brain (pg_cron + pgvector). Keep portability so the host stays swappable.",
+    "golden_rule": "Host heavy Node/AI server code on a full Node runtime, not an edge isolate; keep the brain (DB/vectors/cron) on a host-independent service so the host stays a swappable presentation layer."
+  }
+]

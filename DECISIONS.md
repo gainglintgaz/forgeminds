@@ -687,3 +687,39 @@ The correct response is NOT to ship more pipeline modules on a foundation that h
 - 2026-05-04 entry above — the AI-assisted discovery pivot that made Phase 1.5 possible; same anti-drift discipline applied at higher altitude
 
 ---
+
+## 2026-06-14 — Product reset: broad horizontal engine; the moat is personalization depth, not breadth
+
+**Decision:** ForgeMinds is a **broad, horizontal, category-agnostic** personal intelligence OS (any topic, fully per-user customizable). The differentiator/moat is **personalization DEPTH** (relevance + tunability + content depth + learning loop + Voice DNA + actions + audio), NOT topic breadth. Adopt the **two-layer depth model**: (Layer 1) understanding-depth is the model's job — free and universal across all domains from day one; (Layer 2) instrumentation-depth (live structured data: tickers/charts/stats) is bespoke per-domain and sequenced.
+
+**Why:** The product failed its live test as a generic, shallow digest (errors-fixed.json ERR-019/ERR-020). Founder confirmed the vision is broad/multi-vertical, not finance-only. Breadth is table stakes (Feedly has it); depth-per-user is the defensible moat. Layer 1 is feasible broad-and-deep because 2026 models already reason about any domain at expert level.
+
+**Rejected alternatives:** Finance-only product (contradicts the broad vision, caps TAM). Pure-horizontal-day-one with no proof focus (this is what just failed — deep nowhere). "Accumulated data is the day-one moat" (it is zero on day one — cold start; lessons.md #109).
+
+**Cross-references:** `docs/architecture/forgeminds-v1-finance-core.md`; `docs/architecture/strategy-architecture-brief-2026-06-14.md`; lessons.md #106/#109/#110.
+
+---
+
+## 2026-06-14 — V1 strategy: prove the engine on finance first (B→C), reuse-not-rebuild, three hard gates
+
+**Decision:** Build the engine universal but **prove it concretely on the finance vertical first** (founder has a concrete benchmark — his live Pipedream WF1+WF2 — and is the test user), then immediately generalize to one very different domain (C). The pipeline is **~85% reused, not rebuilt** (the AI router, score/generate, the finance fetchers, the pg_cron dispatcher, user-prefs, the briefs UI all exist; the failure is integration seams + a stall, not missing code). Three non-negotiable V1 gates: **telemetry** (AI tokens/day > 0), **strict resolution** (AI → existing DB UUIDs, never invents), **dogfood** (founder turns Pipedream OFF for 5-7 trading days and rates ForgeMinds ≥0.5 higher).
+
+**Why:** You cannot make every domain deep at once with a broken pipeline; prove the mechanism where a benchmark exists, then extract the abstraction (lessons.md #110). The gates directly kill the three failures that produced the live-test verdict (0 AI calls, invented categories, no human dogfood).
+
+**Rejected alternatives:** Big-bang rebuild from a fresh schema (the existing ~70-table schema is rich; a fresh schema would clobber it and regenerate code against the wrong DB). Pasting a mega-prompt into a fresh coding agent to generate migration+router+jobs at once (ungrounded in the live schema; reproduces the Phase-0 auto-scaffold disaster). The six self-improving loops / Collective Brain / Dot Connector / morphing-OS / Tauri desktop / OAuth-voice ingestion as V1 (over-abstraction; deferred post-dogfood, logged in IDEAS_BACKLOG.md).
+
+**Cross-references:** `docs/architecture/forgeminds-v1-finance-core.md` §7-§9; errors-fixed.json ERR-019; lessons.md #104-#107.
+
+---
+
+## 2026-06-14 — Stack: Next.js → Railway (off Cloudflare Workers); Supabase is the host-independent brain
+
+**Decision:** Move the Next.js app **off Cloudflare Workers/OpenNext** (evidenced runtime failure — ChunkLoadError, errors-fixed.json ERR-026) and host it on **Railway** as a standard Node container (predictable flat CPU/RAM pricing). Keep **Supabase as the brain** (Postgres + pgvector + pg_cron dispatcher + Auth + RLS) so the host stays a swappable presentation layer. **Reuse the existing pg_cron dispatcher** for durable background jobs; do NOT add Trigger.dev/Inngest yet (reuse-before-build). Enforce portability: heavy AI work runs in flat-priced Supabase background, never inside the web host's request cycle.
+
+**Why:** Cloudflare Workers' workerd edge runtime is a poor fit for heavy Node/AI-SDK server code (CPU/memory limits, chunk loading). Railway gives full Node + long-running AI calls + predictable cost (no "Vercel Tax" surprises) — and because the brain is on Supabase, the host choice is low-stakes and reversible. The pg_cron dispatcher already works (telemetry shows 80+ runs); Trigger.dev would replace something that works.
+
+**Rejected alternatives:** Vite + React rewrite (needless — keep Next.js). Vercel (fine at this scale, but founder prefers predictable flat pricing; the "Vercel Tax" is a scaling-stage problem). Trigger.dev/Inngest now (net-new dependency + cost for a solved problem). Staying on Cloudflare Workers (proven runtime pain). Note: project `.claude/CLAUDE.md` Stack section still says "Vercel Fluid Compute" — pending update (see PENDING_APPROVALS Self-Reflection Report).
+
+**Cross-references:** `docs/architecture/forgeminds-v1-finance-core.md` §0/§6; errors-fixed.json ERR-026.
+
+---
