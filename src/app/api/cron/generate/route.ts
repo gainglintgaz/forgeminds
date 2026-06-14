@@ -224,6 +224,10 @@ export async function GET(request: Request) {
     let failedCount = 0;
     let lastModel: string | undefined;
     let totalCostUsd = 0;
+    // Telemetry gate (ERR-019 / lessons.md #104): record the real AI usage on the
+    // run so pipeline_runs proves the AI fired (the §9 acceptance query).
+    let aiCallsMade = 0;
+    let aiTokensUsed = 0;
 
     for (const brief of pendingBriefs) {
       const articleIds = (brief.article_ids ?? []) as string[];
@@ -271,6 +275,8 @@ export async function GET(request: Request) {
         aiCostUsd = aiRes.costEstimateUsd;
         totalCostUsd += aiCostUsd;
         lastModel = aiModel;
+        aiCallsMade += 1;
+        aiTokensUsed += (aiRes.inputTokens || 0) + (aiRes.outputTokens || 0);
       } catch (err) {
         console.error(`[Generate] AI router failed for brief ${brief.id}:`, (err as Error).message);
         failedCount++;
@@ -305,6 +311,15 @@ export async function GET(request: Request) {
 
     const executionTime = Date.now() - startTime;
 
+    // Fail-loud telemetry watchdog (ERR-019 / ERR-025): briefs were pending but
+    // the AI never fired — the brief stays un-synthesized. Surface, don't hide.
+    const aiZeroCallWarning = pendingBriefs.length > 0 && aiCallsMade === 0;
+    if (aiZeroCallWarning) {
+      console.error(
+        `[generate] ⚠ AI-ZERO-CALL: ${pendingBriefs.length} brief(s) pending but made 0 AI calls — briefs left un-synthesized (router down? empty article_ids?). user=${userId.slice(0, 8)}`
+      );
+    }
+
     if (run?.id) {
       await supabase
         .from("pipeline_runs")
@@ -313,12 +328,17 @@ export async function GET(request: Request) {
           items_processed: pendingBriefs.length,
           items_created: generatedCount,
           items_failed: failedCount,
+          ai_calls_made: aiCallsMade,
+          ai_tokens_used: aiTokensUsed,
           duration_ms: executionTime,
           completed_at: new Date().toISOString(),
           metadata: {
             model: lastModel,
             cost_estimate_usd: totalCostUsd,
             prompt_version: PROMPT_VERSION + "/" + GENERATE_PROMPT_VERSION,
+            ai_calls_made: aiCallsMade,
+            ai_tokens_used: aiTokensUsed,
+            ...(aiZeroCallWarning ? { ai_zero_call_warning: true } : {}),
           },
         })
         .eq("id", run.id);

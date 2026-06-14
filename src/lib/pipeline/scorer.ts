@@ -19,11 +19,23 @@ export interface ScoreResult {
   reason: string;
 }
 
+export interface ScoreRunTelemetry {
+  scores: ScoreResult[];
+  aiResponse: AIResponse | null;
+  /** Count of AI router calls that returned a usable response (one per batch). */
+  aiCallsMade: number;
+  /** Sum of input+output tokens across every successful batch call. */
+  aiTokensUsed: number;
+  /** Sum of estimated USD cost across every successful batch call. */
+  aiCostUsd: number;
+}
+
 export async function scoreArticles(
   articles: ArticleToScore[],
   batchSize: number = 15
-): Promise<{ scores: ScoreResult[]; aiResponse: AIResponse | null }> {
-  if (articles.length === 0) return { scores: [], aiResponse: null };
+): Promise<ScoreRunTelemetry> {
+  if (articles.length === 0)
+    return { scores: [], aiResponse: null, aiCallsMade: 0, aiTokensUsed: 0, aiCostUsd: 0 };
 
   const batches: ArticleToScore[][] = [];
   for (let i = 0; i < articles.length; i += batchSize) {
@@ -32,6 +44,12 @@ export async function scoreArticles(
 
   const allScores: ScoreResult[] = [];
   let lastAiResponse: AIResponse | null = null;
+  // Telemetry gate (ERR-019 / lessons.md #104): the AI fired but was invisible
+  // because pipeline_runs.ai_calls_made/ai_tokens_used were never populated.
+  // Aggregate the real router usage across batches so the run can record it.
+  let aiCallsMade = 0;
+  let aiTokensUsed = 0;
+  let aiCostUsd = 0;
 
   for (const batch of batches) {
     const prompt = `Score these news items for a financial audience. Filter out market noise.
@@ -61,6 +79,9 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
       });
 
       lastAiResponse = response;
+      aiCallsMade += 1;
+      aiTokensUsed += (response.inputTokens || 0) + (response.outputTokens || 0);
+      aiCostUsd += response.costEstimateUsd || 0;
 
       const parsed = JSON.parse(response.content);
       const items = Array.isArray(parsed?.items) ? parsed.items : [];
@@ -99,5 +120,5 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
     }
   }
 
-  return { scores: allScores, aiResponse: lastAiResponse };
+  return { scores: allScores, aiResponse: lastAiResponse, aiCallsMade, aiTokensUsed, aiCostUsd };
 }

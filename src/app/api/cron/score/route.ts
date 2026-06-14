@@ -86,7 +86,7 @@ export async function GET(request: Request) {
     }
 
     // Score articles
-    const { scores, aiResponse } = await scoreArticles(
+    const { scores, aiResponse, aiCallsMade, aiTokensUsed, aiCostUsd } = await scoreArticles(
       articles.map((a) => ({
         id: a.id,
         title: a.title,
@@ -130,17 +130,32 @@ export async function GET(request: Request) {
 
     const executionTime = Date.now() - startTime;
 
+    // Fail-loud telemetry watchdog (ERR-019 / ERR-025): if we had real work but
+    // the AI never fired, the run is silently degraded (default scores applied).
+    // Surface it instead of reporting a clean "completed".
+    const aiZeroCallWarning = articles.length > 0 && aiCallsMade === 0;
+    if (aiZeroCallWarning) {
+      console.error(
+        `[score] ⚠ AI-ZERO-CALL: processed ${articles.length} articles but made 0 AI calls — scoring degraded to defaults (router down?). user=${userId.slice(0, 8)}`
+      );
+    }
+
     if (run?.id) {
       await supabase.from("pipeline_runs").update({
         status: "completed",
         items_processed: articles.length,
         items_created: insertedCount,
+        ai_calls_made: aiCallsMade,
+        ai_tokens_used: aiTokensUsed,
         duration_ms: executionTime,
         completed_at: new Date().toISOString(),
         metadata: {
           model: aiResponse?.model,
           prompt_version: PROMPT_VERSION,
-          cost_estimate_usd: aiResponse?.costEstimateUsd,
+          cost_estimate_usd: aiCostUsd,
+          ai_calls_made: aiCallsMade,
+          ai_tokens_used: aiTokensUsed,
+          ...(aiZeroCallWarning ? { ai_zero_call_warning: true } : {}),
         },
       }).eq("id", run.id);
     }
