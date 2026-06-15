@@ -192,7 +192,8 @@ Every AI output traceable (`prompt_version` + model + tokens + cost + `sources[]
 
 Signed: Victor  Date: 2026-06-14  (verbatim: "All assumptions approved as-is. Plan and architecture well first.")
 > **Status update:** APPROVED 2026-06-14. Build may proceed in thin, verified, dogfooded slices (Appendix B S1→S7), founder-reviewed between slices.
-> **S1 status (2026-06-14):** DONE pending founder review. AI now fires + is recorded (telemetry gate). Seam fixed (curate no longer clobbers generate's AI label); ai_calls_made/ai_tokens_used written; fail-loud 0-call watchdog + GET /api/ops/ai-telemetry added. Proven live on dev (user 3707759d): score=1582 tok + generate=1830 tok today, brief generation_model=claude-sonnet-4-6. Commits fce39ef (seam) + 3af7400 (telemetry). AWAIT founder go-ahead before S2.
+> **S1 status (2026-06-14):** DONE pending founder review. AI now fires + is recorded (telemetry gate). Seam fixed (curate no longer clobbers generate's AI label); ai_calls_made/ai_tokens_used written; fail-loud 0-call watchdog + GET /api/ops/ai-telemetry added. Proven live on dev (user 3707759d): score=1582 tok + generate=1830 tok today, brief generation_model=claude-sonnet-4-6. Commits fce39ef (seam) + 3af7400 (telemetry).
+> **S2 status (2026-06-14):** DONE pending founder review. Strict category resolution (14 real categories, was 1; `categories` table + resolver, misses→`uncategorized`, never invented) + per-user relevance personalization (ERR-020: scorer reads topics/tickers, brief leads with finance for the seeded user) + cross-brief dedup (ERR-024, overlap=0). Migration `20260614000000` (advisors clean). Also fixed gemini-2.5-flash thinking starving the JSON output. Commits 3025e82 + 498fef2. **Ticker/entity UUID resolution deferred to S3.** AWAIT founder go-ahead before S3.
 ```
 > No code commits until Victor replies with the keyword **build approved** (per `execution.md` Phase 0 §6).
 
@@ -216,7 +217,7 @@ All deferrals logged in `IDEAS_BACKLOG.md`.
 ## §9 -- Acceptance criteria
 
 - [x] **Telemetry gate (S1, 2026-06-14):** `SELECT sum(ai_tokens_used) FROM pipeline_runs WHERE started_at::date = current_date AND step_name IN ('score','generate')` returns **> 0** — proven live: score=1582, generate=1830 today. Metric surfaced via `GET /api/ops/ai-telemetry` (`telemetry_gate_pass:true`); a dashboard widget on top of that JSON is deferred to a later slice.
-- [ ] **Strict resolution:** `scored_articles.diversity_category` shows **≥3 distinct real categories** (not only `core`); unresolved AI categories/tickers land in a review queue (count queryable); 0 invented categories persisted.
+- [x] **Strict resolution (S2, 2026-06-14):** `scored_articles.diversity_category` shows **14 distinct real categories** (was only `core`); unresolved AI categories land in the `uncategorized` review bucket (`category_resolution`/`category_id` queryable); 0 invented categories persisted. *(Category resolution done; ticker/entity UUID resolution deferred to S3 with the market-data layer.)*
 - [ ] **Dogfood gate (THE definition of done):** Victor runs daily finance ops on ForgeMinds with Pipedream **OFF** for 5-7 trading days; mean daily rating ≥ Pipedream + 0.5; ≥2-3 documented real decisions/time-saved.
 - [ ] **WF1+WF2 parity:** a finance brief contains ≥10-15 curated stories with resolved tickers + market data + NL interpretation + ≥1 chart + ≥1 social draft + ≥1 video prompt + a rendered HTML email.
 - [ ] **No dead UI** (Dead Button Test): Save -> item appears on the saved page; Dismiss -> item leaves the view; Act -> a draft is produced.

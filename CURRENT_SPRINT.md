@@ -16,8 +16,13 @@ behind the slice sequence (S7 = the dogfood/alpha week).
   - Verified diagnosis: generate DID fire (claude) but curate re-runs clobbered its `generation_model` → 'heuristic' (mislabel), and `ai_calls_made`/`ai_tokens_used` were never written (telemetry invisible). Dispatcher also stalled after 06-13.
   - Fixes: curate seam (no clobber); telemetry columns written on score+generate; fail-loud 0-AI-call watchdog; `GET /api/ops/ai-telemetry`.
   - Proof (dev, user 3707759d, 06-14): score 1582 tok + generate 1830 tok today; brief `generation_model=claude-sonnet-4-6`. Commits `fce39ef` + `3af7400`.
-- [ ] **S2 — Finance personalization + strict resolution** (NOT started; awaits founder go-ahead). Seed topics/tracked_tickers; resolve categories/tickers to DB UUIDs (≥3 real categories, fixes ERR-021/020); cross-brief dedup (ERR-024). Needs a migration (canonical categories + seeded aliases).
-- [ ] S3 enrich · S4 WF2 outputs · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
+- [x] **S2 — Finance personalization + strict category resolution + cross-brief dedup** — DONE 2026-06-14, pending founder review.
+  - Strict resolution (ERR-021): `categories` table (13 canonical + `uncategorized`) + `category-resolver.ts`; score writes the resolved slug + `category_id`, never the old hardcoded `core`; misses → `uncategorized` (review), never invented. Migration `20260614000000` (advisors clean).
+  - Personalization (ERR-020): `loadPrefs` reads topics/tracked_tickers/excluded_topics; scorer scores a real per-user `relevance_score`; test user seeded (7 topics / 11 tickers / 4 excluded). Also fixed gemini-2.5-flash thinking eating the JSON budget (scoring had been silently defaulting).
+  - Cross-brief dedup (ERR-024): curate excludes articles from the user's prior briefs.
+  - Proof (dev, user 3707759d): 14 real categories (was 1); brief leads with SpaceX $1.78tn float (finance), finance/AI/macro rel 8-10, sports/royals rel 1; cross_brief_overlap=0; score+generate ai_tokens today >0. Commits `3025e82` + `498fef2`.
+  - **Deferred to S3** (entity layer belongs with tickers/market): ticker/entity UUID resolution into the empty `entities` table (scored_articles.tickers/entity_ids still unwritten). Personalization uses ticker TEXT in the scoring prompt, which is sufficient for S2's relevance.
+- [ ] S3 enrich (tickers + market data + NL interpretation; **+ entity/ticker UUID resolution**) · S4 WF2 outputs · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
 
 **Known still-open (not S1 scope):** dispatcher restart on a working host (S6 Railway; Cloudflare deploy is broken per ERR-026), empty personalization (S2), single 'core' category (S2), `sources.last_fetched_at` never updated (ERR-025 ops follow-up).
 
