@@ -50,10 +50,11 @@ export async function GET(request: Request) {
       new Date().toLocaleString("en-US", { timeZone: tz })
     );
     localToday.setHours(0, 0, 0, 0);
+    const briefDate = localToday.toISOString().split("T")[0];
 
     const { data: scored } = await supabase
       .from("scored_articles")
-      .select("article_id, impact_score, credibility_score, novelty_score, composite_score, diversity_category, sentiment, curation_reason")
+      .select("article_id, relevance_score, impact_score, credibility_score, novelty_score, composite_score, diversity_category, sentiment, curation_reason")
       .eq("user_id", userId)
       .gte("created_at", localToday.toISOString())
       .order("composite_score", { ascending: false });
@@ -71,18 +72,54 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "No scored articles to curate", curated: 0 });
     }
 
+    // Cross-brief dedup (ERR-024): drop articles already served in this user's
+    // PRIOR briefs (strictly earlier dates) so a story is never re-delivered.
+    // Within-fetch dedup (content_hash) is not cross-time dedup.
+    const { data: priorBriefs } = await supabase
+      .from("briefs")
+      .select("article_ids")
+      .eq("user_id", userId)
+      .lt("brief_date", briefDate);
+    const alreadyDelivered = new Set<string>();
+    for (const b of priorBriefs ?? []) {
+      for (const id of ((b.article_ids ?? []) as string[])) alreadyDelivered.add(id);
+    }
+    const freshScored = scored.filter((s) => !alreadyDelivered.has(s.article_id));
+
+    if (freshScored.length === 0) {
+      if (run?.id) {
+        await supabase.from("pipeline_runs").update({
+          status: "completed",
+          items_processed: scored.length,
+          items_created: 0,
+          duration_ms: Date.now() - startTime,
+          completed_at: new Date().toISOString(),
+          metadata: { note: "all scored articles already delivered in prior briefs (cross-brief dedup)" },
+        }).eq("id", run.id);
+      }
+      return NextResponse.json({
+        scoredIn: scored.length,
+        curated: 0,
+        dedupedOut: scored.length,
+        message: "All candidates already delivered in prior briefs",
+      });
+    }
+
     // Re-hydrate the scorer's 1-10 internal shape for the curator (which expects
     // that range). The schema stores 0-1; multiply by 10 here.
     // Curator config (target count, max-per-category, min score) comes from
     // user prefs — no hardcoded literals (factory rule §17 / VIBE Rule 55).
+    // category is now the resolved canonical slug (S2), so maxPerCategory
+    // genuinely diversifies across finance/geopolitics/tech/... not one 'core'.
     const curated = curateStories(
-      scored.map((s) => ({
+      freshScored.map((s) => ({
         articleId: s.article_id,
+        relevanceScore: Number(s.relevance_score) * 10,
         impactScore: Number(s.impact_score) * 10,
         depthScore: Number(s.credibility_score) * 10,
         viralScore: Number(s.novelty_score) * 10,
         compositeScore: Number(s.composite_score) * 10,
-        category: s.diversity_category || "core",
+        category: s.diversity_category || "uncategorized",
         tone: s.sentiment || "neutral",
         reason: s.curation_reason || "",
       })),
@@ -99,7 +136,6 @@ export async function GET(request: Request) {
     // brief_type (default 'daily'), brief_date (NOT NULL), summary_html/text,
     // article_ids (uuid[]), ticker_symbols (text[]), article_count,
     // categories_covered, generation_model, prompt_version.
-    const briefDate = localToday.toISOString().split("T")[0];
     const articleIds = curated.map((c) => c.articleId);
     const categoriesCovered = Array.from(new Set(curated.map((c) => c.category)));
 
