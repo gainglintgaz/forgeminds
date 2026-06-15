@@ -16,6 +16,12 @@ export async function callGemini(
     generationConfig: {
       maxOutputTokens: request.maxTokens || 2048,
       temperature: 0.3,
+      // gemini-2.5-flash is a thinking model: by default reasoning tokens eat
+      // the output budget and can leave the JSON answer empty/truncated
+      // ("Unexpected end of JSON input"). Gemini is our triage/scoring model —
+      // it needs reliable structured output, not chain-of-thought — so disable
+      // thinking (full budget → the answer). Big quality reasoning is Claude's job.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   };
 
@@ -43,7 +49,16 @@ export async function callGemini(
   }
 
   const data = await response.json();
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  // Join all NON-thought text parts (a thinking model can split the answer
+  // across parts and/or prepend a thought part with no usable text). Reading
+  // only parts[0].text loses the answer when the first part is a thought.
+  const parts: Array<{ text?: string; thought?: boolean }> =
+    data.candidates?.[0]?.content?.parts ?? [];
+  const content = parts
+    .filter((p) => !p?.thought)
+    .map((p) => p?.text ?? "")
+    .join("")
+    .trim();
   const usage = data.usageMetadata || {};
   const inputTokens = usage.promptTokenCount || 0;
   const outputTokens = usage.candidatesTokenCount || 0;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scoreArticles } from "@/lib/pipeline/scorer";
+import { loadCategoryResolver } from "@/lib/pipeline/category-resolver";
 import { PROMPT_VERSION } from "@/lib/ai/router";
 import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 
@@ -85,33 +86,52 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "No articles to score", scored: 0 });
     }
 
-    // Score articles
+    // Score articles against THIS user's interest graph (S2 personalization,
+    // ERR-020). Empty arrays → relevance falls back to general importance.
     const { scores, aiResponse, aiCallsMade, aiTokensUsed, aiCostUsd } = await scoreArticles(
       articles.map((a) => ({
         id: a.id,
         title: a.title,
         description: a.summary || "",
         sourceName: a.source_name,
-      }))
+      })),
+      {
+        topics: prefs.topics,
+        trackedTickers: prefs.tracked_tickers,
+        excludedTopics: prefs.excluded_topics,
+      }
     );
+
+    // Strict category resolution (ERR-021): the model's category may only map to
+    // an existing canonical UUID; a miss → 'uncategorized' (flagged for review).
+    const categoryResolver = await loadCategoryResolver(supabase);
 
     // Store scores. Schema columns: article_id (FK), relevance_score, impact_score,
     // novelty_score, credibility_score, composite_score (all 0-1), sentiment,
     // diversity_category, curation_reason, scoring_model (NOT NULL),
     // prompt_version (NOT NULL).
     let insertedCount = 0;
+    let flaggedCount = 0;
     for (const score of scores) {
+      const cat = categoryResolver.resolve(score.category);
+      if (cat.resolution === "flagged_for_review") flaggedCount++;
       const { error } = await supabase.from("scored_articles").upsert(
         {
           article_id: score.articleId,
           user_id: userId,
-          relevance_score: toFraction(score.impactScore),
+          // relevance_score is now the REAL per-user relevance (was a copy of
+          // impact). This is what makes the brief favor the reader's interests.
+          relevance_score: toFraction(score.relevanceScore),
           impact_score: toFraction(score.impactScore),
           novelty_score: toFraction(score.viralScore),
           credibility_score: toFraction(score.depthScore),
           composite_score: toFraction(score.compositeScore),
           sentiment: toneToSentiment(score.tone),
-          diversity_category: "core",
+          // Strict resolution (ERR-021): the resolved canonical slug + UUID,
+          // never the old hardcoded "core". Miss → 'uncategorized' for review.
+          diversity_category: cat.slug,
+          category_id: cat.categoryId,
+          category_resolution: cat.resolution,
           curation_reason: score.reason,
           scoring_model: aiResponse?.model || "unknown",
           prompt_version: PROMPT_VERSION,
@@ -155,6 +175,7 @@ export async function GET(request: Request) {
           cost_estimate_usd: aiCostUsd,
           ai_calls_made: aiCallsMade,
           ai_tokens_used: aiTokensUsed,
+          category_flagged_for_review: flaggedCount,
           ...(aiZeroCallWarning ? { ai_zero_call_warning: true } : {}),
         },
       }).eq("id", run.id);
