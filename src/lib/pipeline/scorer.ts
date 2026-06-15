@@ -30,6 +30,8 @@ export interface ScoreResult {
   compositeScore: number;
   /** One of the 13 canonical category slugs (resolved downstream to a UUID). */
   category: string;
+  /** Ticker SYMBOLS the article is about (e.g. ['AAPL','BTC']); resolved to entity UUIDs downstream. */
+  tickers: string[];
   tone: string;
   reason: string;
 }
@@ -118,9 +120,11 @@ CATEGORY: classify into EXACTLY ONE of these canonical slugs (output the slug ve
 ${CANONICAL_CATEGORIES.join(", ")}
 If none fit, output "uncategorized". Never invent a category.
 
+TICKERS: list the stock/crypto ticker SYMBOLS the article is directly about (uppercase, e.g. ["AAPL","NVDA","BTC"]); [] if none. Only real, well-formed symbols — never invent one.
+
 Tones: neutral, bullish, bearish, mixed.
 
-Return JSON: {"items":[{"id":"...","category":"<slug>","relevance_score":N,"impact_score":N,"depth_score":N,"viral_score":N,"tone":"...","reason":"1 sentence"}]}
+Return JSON: {"items":[{"id":"...","category":"<slug>","tickers":["..."],"relevance_score":N,"impact_score":N,"depth_score":N,"viral_score":N,"tone":"...","reason":"1 sentence"}]}
 
 Articles:
 ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.description?.slice(0, 400) })))}`;
@@ -161,6 +165,15 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
             (relevance * 0.45 + impact * 0.3 + depth * 0.15 + viral * 0.1).toFixed(2)
           ),
           category: (item.category || "uncategorized").toString(),
+          tickers: Array.isArray(item.tickers)
+            ? Array.from(
+                new Set(
+                  item.tickers
+                    .map((t: unknown) => String(t).trim().toUpperCase().replace(/^\$/, ""))
+                    .filter((t: string) => /^\^?[A-Z]{1,6}$/.test(t))
+                )
+              ).slice(0, 5) as string[]
+            : [],
           tone: item.tone || "neutral",
           reason: item.reason || "",
         });
@@ -178,6 +191,7 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
           viralScore: 5,
           compositeScore: 5,
           category: "uncategorized",
+          tickers: [],
           tone: "neutral",
           reason: "Scoring failed — default scores applied",
         });

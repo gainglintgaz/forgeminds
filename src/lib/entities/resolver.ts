@@ -96,7 +96,63 @@ export class EntityResolver {
 
     return Array.from(found.values()).slice(0, TICKER_LIMIT);
   }
+
+  /**
+   * Strict ticker resolution (lessons.md #105, VIBE Rule 24). A ticker SYMBOL is
+   * a canonical market identifier — if it's a well-formed symbol we resolve to
+   * the existing entity or CREATE one (the symbol IS the canonical key). Anything
+   * that isn't a well-formed symbol returns null (flag/skip — never invent an
+   * entity from ambiguous free text). Safe to call repeatedly (caches in maps).
+   */
+  async resolveOrCreateTicker(
+    supabase: SupabaseClient,
+    rawSymbol: string
+  ): Promise<string | null> {
+    const sym = (rawSymbol ?? "").trim().toUpperCase().replace(/^\$/, "");
+    // Well-formed equity/crypto (AAPL, BTC) or index (^GSPC). Reject junk so a
+    // hallucinated phrase never becomes an entity row.
+    if (!/^\^?[A-Z]{1,6}$/.test(sym)) return null;
+    if (ENTITY_BLACKLIST.has(sym.toLowerCase())) return null;
+
+    const existing = this.symbolMap.get(sym);
+    if (existing) return existing.entityId;
+
+    const type: ResolvedEntity["type"] = CRYPTO_SYMBOLS.has(sym) ? "crypto" : "company";
+    const { data, error } = await supabase
+      .from("entities")
+      .insert({ name: sym, type, ticker_symbol: sym })
+      .select("id")
+      .single();
+
+    let entityId: string | null = data?.id ?? null;
+    if (error) {
+      // Race: another run created it first (unique ticker_symbol). Re-read.
+      if (error.code === "23505") {
+        const { data: row } = await supabase
+          .from("entities")
+          .select("id")
+          .eq("ticker_symbol", sym)
+          .maybeSingle();
+        entityId = row?.id ?? null;
+      } else {
+        console.error(`[EntityResolver] create ${sym} failed: ${error.message}`);
+        return null;
+      }
+    }
+    if (!entityId) return null;
+
+    const resolved: ResolvedEntity = { entityId, symbol: sym, name: sym, type, matchedAlias: sym };
+    this.symbolMap.set(sym, resolved);
+    this.aliasMap.set(sym.toLowerCase(), resolved);
+    return entityId;
+  }
 }
+
+// Common crypto symbols → create as type 'crypto' (everything else defaults to
+// 'company'). Small on purpose; expand as the catalog grows.
+const CRYPTO_SYMBOLS = new Set([
+  "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "BNB", "AVAX", "DOT", "MATIC", "LTC", "LINK",
+]);
 
 // Singleton instance for the pipeline
 let resolverInstance: EntityResolver | null = null;

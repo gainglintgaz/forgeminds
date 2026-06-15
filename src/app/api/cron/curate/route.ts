@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
     const { data: scored } = await supabase
       .from("scored_articles")
-      .select("article_id, relevance_score, impact_score, credibility_score, novelty_score, composite_score, diversity_category, sentiment, curation_reason")
+      .select("article_id, relevance_score, impact_score, credibility_score, novelty_score, composite_score, diversity_category, sentiment, curation_reason, tickers")
       .eq("user_id", userId)
       .gte("created_at", localToday.toISOString())
       .order("composite_score", { ascending: false });
@@ -120,6 +120,7 @@ export async function GET(request: Request) {
         viralScore: Number(s.novelty_score) * 10,
         compositeScore: Number(s.composite_score) * 10,
         category: s.diversity_category || "uncategorized",
+        tickers: ((s.tickers ?? []) as string[]),
         tone: s.sentiment || "neutral",
         reason: s.curation_reason || "",
       })),
@@ -139,6 +140,15 @@ export async function GET(request: Request) {
     const articleIds = curated.map((c) => c.articleId);
     const categoriesCovered = Array.from(new Set(curated.map((c) => c.category)));
 
+    // Aggregate the curated stories' resolved tickers → brief ticker_symbols (S3).
+    // This is what feeds the enrich step (market data) + generate (the market read).
+    const tickersByArticle = new Map(
+      freshScored.map((s) => [s.article_id, ((s.tickers ?? []) as string[])])
+    );
+    const tickerSymbols = Array.from(
+      new Set(articleIds.flatMap((id) => tickersByArticle.get(id) ?? []))
+    );
+
     // ── LOAD-BEARING SEAM (ERR-019 fix) ──────────────────────────────────
     // curate OWNS the article selection; generate OWNS the AI summary +
     // generation_model/prompt_version. The old blanket upsert re-stamped
@@ -152,7 +162,7 @@ export async function GET(request: Request) {
     // generate step (which selects `summary_html IS NULL`) picks it up.
     const curationFields = {
       article_ids: articleIds,
-      ticker_symbols: [] as string[],
+      ticker_symbols: tickerSymbols,
       article_count: curated.length,
       categories_covered: categoriesCovered,
     };

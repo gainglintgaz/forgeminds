@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scoreArticles } from "@/lib/pipeline/scorer";
 import { loadCategoryResolver } from "@/lib/pipeline/category-resolver";
+import { getResolver } from "@/lib/entities/resolver";
 import { PROMPT_VERSION } from "@/lib/ai/router";
 import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 
@@ -106,6 +107,11 @@ export async function GET(request: Request) {
     // an existing canonical UUID; a miss → 'uncategorized' (flagged for review).
     const categoryResolver = await loadCategoryResolver(supabase);
 
+    // Strict ticker/entity resolution (S3): extracted symbols resolve to (or
+    // create) canonical entity UUIDs; malformed strings are skipped, never invented.
+    const entityResolver = getResolver();
+    await entityResolver.load(supabase);
+
     // Store scores. Schema columns: article_id (FK), relevance_score, impact_score,
     // novelty_score, credibility_score, composite_score (all 0-1), sentiment,
     // diversity_category, curation_reason, scoring_model (NOT NULL),
@@ -115,10 +121,22 @@ export async function GET(request: Request) {
     for (const score of scores) {
       const cat = categoryResolver.resolve(score.category);
       if (cat.resolution === "flagged_for_review") flaggedCount++;
+
+      // Resolve each extracted symbol → canonical entity UUID (create if a real
+      // ticker, skip if malformed — never invent). tickers[] keeps the raw
+      // symbols for display; entity_ids[] holds only resolved UUIDs.
+      const entityIds: string[] = [];
+      for (const sym of score.tickers) {
+        const id = await entityResolver.resolveOrCreateTicker(supabase, sym);
+        if (id) entityIds.push(id);
+      }
+
       const { error } = await supabase.from("scored_articles").upsert(
         {
           article_id: score.articleId,
           user_id: userId,
+          tickers: score.tickers,
+          entity_ids: entityIds,
           // relevance_score is now the REAL per-user relevance (was a copy of
           // impact). This is what makes the brief favor the reader's interests.
           relevance_score: toFraction(score.relevanceScore),
