@@ -146,6 +146,51 @@ export class EntityResolver {
     this.aliasMap.set(sym.toLowerCase(), resolved);
     return entityId;
   }
+
+  /**
+   * Batch variant of resolveOrCreateTicker (VIBE Rule 53 — kills the per-ticker
+   * N+1 in score). Resolves all known symbols in-memory off the loaded maps,
+   * creates the unknown-but-well-formed ones in ONE insert, and returns a
+   * normalized-symbol → entityId map. Malformed/blacklisted symbols are omitted.
+   */
+  async resolveOrCreateTickersBatch(
+    supabase: SupabaseClient,
+    rawSymbols: string[]
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const toCreate: string[] = [];
+    for (const raw of rawSymbols) {
+      const sym = (raw ?? "").trim().toUpperCase().replace(/^\$/, "");
+      if (!/^\^?[A-Z]{1,6}$/.test(sym) || ENTITY_BLACKLIST.has(sym.toLowerCase())) continue;
+      if (out.has(sym) || toCreate.includes(sym)) continue;
+      const existing = this.symbolMap.get(sym);
+      if (existing) out.set(sym, existing.entityId);
+      else toCreate.push(sym);
+    }
+    if (toCreate.length === 0) return out;
+
+    const rows = toCreate.map((sym) => ({
+      name: sym,
+      type: (CRYPTO_SYMBOLS.has(sym) ? "crypto" : "company") as ResolvedEntity["type"],
+      ticker_symbol: sym,
+    }));
+    const { data, error } = await supabase.from("entities").insert(rows).select("id, ticker_symbol");
+    // On a unique-conflict race (some created by a concurrent run), re-read all.
+    const resolvedRows =
+      !error && data
+        ? data
+        : (await supabase.from("entities").select("id, ticker_symbol").in("ticker_symbol", toCreate)).data ?? [];
+    for (const r of resolvedRows) {
+      const sym = (r.ticker_symbol as string)?.toUpperCase();
+      if (!sym) continue;
+      const type: ResolvedEntity["type"] = CRYPTO_SYMBOLS.has(sym) ? "crypto" : "company";
+      const resolved: ResolvedEntity = { entityId: r.id, symbol: sym, name: sym, type, matchedAlias: sym };
+      this.symbolMap.set(sym, resolved);
+      this.aliasMap.set(sym.toLowerCase(), resolved);
+      out.set(sym, r.id);
+    }
+    return out;
+  }
 }
 
 // Common crypto symbols → create as type 'crypto' (everything else defaults to

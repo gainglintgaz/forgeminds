@@ -116,49 +116,61 @@ export async function GET(request: Request) {
     // novelty_score, credibility_score, composite_score (all 0-1), sentiment,
     // diversity_category, curation_reason, scoring_model (NOT NULL),
     // prompt_version (NOT NULL).
-    let insertedCount = 0;
+    // Batch ticker resolution (VIBE Rule 53): resolve/create ALL symbols in one
+    // pass (in-memory for known, ONE insert for new) instead of a per-ticker
+    // DB round-trip. This is the N+1 that made score slow enough to be killed
+    // mid-run on a constrained host (the dangling 'running' rows).
+    const tickerToEntity = await entityResolver.resolveOrCreateTickersBatch(
+      supabase,
+      scores.flatMap((s) => s.tickers)
+    );
+
     let flaggedCount = 0;
-    for (const score of scores) {
+    // Only persist scores whose article_id is a REAL input id. The AI
+    // occasionally echoes a mangled/hallucinated id; in a batch upsert one bad
+    // uuid rejects the whole set (the per-row version silently skipped them).
+    const validArticleIds = new Set(articles.map((a) => a.id));
+    const rows = scores
+      .filter((score) => validArticleIds.has(score.articleId))
+      .map((score) => {
       const cat = categoryResolver.resolve(score.category);
       if (cat.resolution === "flagged_for_review") flaggedCount++;
-
-      // Resolve each extracted symbol → canonical entity UUID (create if a real
-      // ticker, skip if malformed — never invent). tickers[] keeps the raw
-      // symbols for display; entity_ids[] holds only resolved UUIDs.
-      const entityIds: string[] = [];
-      for (const sym of score.tickers) {
-        const id = await entityResolver.resolveOrCreateTicker(supabase, sym);
-        if (id) entityIds.push(id);
-      }
-
-      const { error } = await supabase.from("scored_articles").upsert(
-        {
-          article_id: score.articleId,
-          user_id: userId,
-          tickers: score.tickers,
-          entity_ids: entityIds,
-          // relevance_score is now the REAL per-user relevance (was a copy of
-          // impact). This is what makes the brief favor the reader's interests.
-          relevance_score: toFraction(score.relevanceScore),
-          impact_score: toFraction(score.impactScore),
-          novelty_score: toFraction(score.viralScore),
-          credibility_score: toFraction(score.depthScore),
-          composite_score: toFraction(score.compositeScore),
-          sentiment: toneToSentiment(score.tone),
-          // Strict resolution (ERR-021): the resolved canonical slug + UUID,
-          // never the old hardcoded "core". Miss → 'uncategorized' for review.
-          diversity_category: cat.slug,
-          category_id: cat.categoryId,
-          category_resolution: cat.resolution,
-          curation_reason: score.reason,
-          scoring_model: aiResponse?.model || "unknown",
-          prompt_version: PROMPT_VERSION,
-        },
-        { onConflict: "article_id,user_id" }
+      const entityIds = Array.from(
+        new Set(
+          score.tickers
+            .map((t) => tickerToEntity.get(t.trim().toUpperCase().replace(/^\$/, "")))
+            .filter((id): id is string => !!id)
+        )
       );
+      return {
+        article_id: score.articleId,
+        user_id: userId,
+        tickers: score.tickers,
+        entity_ids: entityIds,
+        // relevance_score is the REAL per-user relevance (S2), not a copy of impact.
+        relevance_score: toFraction(score.relevanceScore),
+        impact_score: toFraction(score.impactScore),
+        novelty_score: toFraction(score.viralScore),
+        credibility_score: toFraction(score.depthScore),
+        composite_score: toFraction(score.compositeScore),
+        sentiment: toneToSentiment(score.tone),
+        // Strict resolution (ERR-021): resolved canonical slug + UUID, never "core".
+        diversity_category: cat.slug,
+        category_id: cat.categoryId,
+        category_resolution: cat.resolution,
+        curation_reason: score.reason,
+        scoring_model: aiResponse?.model || "unknown",
+        prompt_version: PROMPT_VERSION,
+      };
+    });
 
-      if (!error) insertedCount++;
-    }
+    // ONE batch upsert (was N per-row upserts). On failure, throw → the catch
+    // writes status='failed' (the run never dangles in 'running').
+    const { error: upsertErr } = await supabase
+      .from("scored_articles")
+      .upsert(rows, { onConflict: "article_id,user_id" });
+    if (upsertErr) throw new Error(`scored_articles batch upsert failed: ${upsertErr.message}`);
+    const insertedCount = rows.length;
 
     // Advance pipeline_status of scored articles so we don't re-pick them.
     await supabase

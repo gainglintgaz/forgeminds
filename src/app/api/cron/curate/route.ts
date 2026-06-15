@@ -169,7 +169,7 @@ export async function GET(request: Request) {
 
     const { data: existing, error: existErr } = await supabase
       .from("briefs")
-      .select("id")
+      .select("id, article_ids")
       .eq("user_id", userId)
       .eq("brief_type", "daily")
       .eq("brief_date", briefDate)
@@ -180,11 +180,27 @@ export async function GET(request: Request) {
     }
 
     if (existing?.id) {
-      // Existing brief → preserve generate's AI output; update curation only.
-      const { error } = await supabase
-        .from("briefs")
-        .update(curationFields)
-        .eq("id", existing.id);
+      // Brief-consistency invariant (S3.1): a brief's label MUST match its
+      // summary. If the curated article set CHANGED, the existing AI summary is
+      // now stale → reset summary + label to the heuristic placeholder so
+      // generate's `summary_html IS NULL` filter re-synthesizes it under the
+      // correct label. If UNCHANGED, preserve generate's output (the S1
+      // non-clobber — never reset a Claude summary that still matches its set).
+      const prevIds = ((existing.article_ids ?? []) as string[]).slice().sort();
+      const newIds = articleIds.slice().sort();
+      const changed = prevIds.length !== newIds.length || prevIds.some((id, i) => id !== newIds[i]);
+
+      const updateFields = changed
+        ? {
+            ...curationFields,
+            summary_html: null,
+            summary_text: null,
+            generation_model: CURATOR_GENERATION_MODEL,
+            prompt_version: CURATOR_PROMPT_VERSION,
+          }
+        : curationFields;
+
+      const { error } = await supabase.from("briefs").update(updateFields).eq("id", existing.id);
       if (error) console.error(`[Curate] Brief update failed: ${error.message}`);
     } else {
       // New brief → insert with heuristic placeholder; summary_html stays NULL
