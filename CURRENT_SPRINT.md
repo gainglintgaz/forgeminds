@@ -22,7 +22,13 @@ behind the slice sequence (S7 = the dogfood/alpha week).
   - Cross-brief dedup (ERR-024): curate excludes articles from the user's prior briefs.
   - Proof (dev, user 3707759d): 14 real categories (was 1); brief leads with SpaceX $1.78tn float (finance), finance/AI/macro rel 8-10, sports/royals rel 1; cross_brief_overlap=0; score+generate ai_tokens today >0. Commits `3025e82` + `498fef2`.
   - **Deferred to S3** (entity layer belongs with tickers/market): ticker/entity UUID resolution into the empty `entities` table (scored_articles.tickers/entity_ids still unwritten). Personalization uses ticker TEXT in the scoring prompt, which is sufficient for S2's relevance.
-- [ ] S3 enrich (tickers + market data + NL interpretation; **+ entity/ticker UUID resolution**) · S4 WF2 outputs · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
+- [x] **S3 — Enrich: ticker/entity resolution + market data + NL interpretation + intraday** — DONE 2026-06-15, pending founder review.
+  - Strict ticker/entity resolution: seeded 14 entities + 22 aliases; scorer extracts tickers[]; `resolveOrCreateTicker` (symbol canonical→create, malformed→skip, never invent); scored_articles.tickers/entity_ids written; curate aggregates → briefs.ticker_symbols.
+  - Market data: `market-data.ts` (Finnhub quote+profile2+metric, CoinGecko crypto, Alpaca IEX intraday); enrich enriches tracked ∪ story tickers, cost-guarded; rich ticker_data + intraday_json filled. Migration `20260615000000` (advisors clean).
+  - NL market read: cheap gemini call → ticker_data.interpretation + prompt_version (market-read-v0.1); generate weaves real ticker/price/52w/PE + the read into finance stories.
+  - Proof (dev, user 3707759d): 11/11 tracked enriched (AAPL P/E 34.9, TSLA +1.82% P/E 395, BTC $66.8k +3.9%); 9 intraday; 11 NL reads; brief story reads "TSLA closed at $406.43, up 1.82%… SPY $741.75 and QQQ $721.34 near 52-week highs"; score/enrich/generate ai_tokens all >0. Commits `abb0648` + `fd0a83c` + `c464a43`.
+  - **Honest limit:** scored_articles.tickers populated for only 1 story this run — the source pool is world/macro news that rarely names a public ticker; the brief's market read is carried by the always-enriched tracked watchlist (correct design). A finance-source-weighted ingest (source-quality loop) is the lever for more story-level tickers.
+- [ ] S4 WF2 outputs (charts from intraday_json + social drafts + video prompts) · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
 
 **Known still-open (not S1 scope):** dispatcher restart on a working host (S6 Railway; Cloudflare deploy is broken per ERR-026), empty personalization (S2), single 'core' category (S2), `sources.last_fetched_at` never updated (ERR-025 ops follow-up).
 
