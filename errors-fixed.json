@@ -78,5 +78,15 @@
     "root_cause": "Next.js (Turbopack server chunks) + OpenNext on the Cloudflare Workers workerd runtime is a poor fit for heavy Node/AI-SDK server code; Workers' CPU/memory limits and chunk loading break the AI pipeline. The app deviated from the originally-intended Vercel target.",
     "fix": "Move the Next.js app off Cloudflare Workers; host on a full Node runtime (Railway chosen) with Supabase as the host-independent brain (pg_cron + pgvector). Keep portability so the host stays swappable.",
     "golden_rule": "Host heavy Node/AI server code on a full Node runtime, not an edge isolate; keep the brain (DB/vectors/cron) on a host-independent service so the host stays a swappable presentation layer."
+  },
+  {
+    "id": "ERR-027",
+    "date": "2026-06-14",
+    "project": "ForgeMinds",
+    "tag": "ai-routing",
+    "symptom": "Even after S1 wired telemetry, every article scored relevance/composite 0.50 and category 'uncategorized' — scoring was garbage while telemetry showed the AI 'fired' (ai_calls_made=1).",
+    "root_cause": "gemini-2.5-flash is a THINKING model; its reasoning tokens consumed the entire output budget, so it returned empty text -> JSON.parse threw 'Unexpected end of JSON input' -> scorer.ts catch swallowed it into per-batch default 5/5/5 scores. The call succeeded (tokens billed, ai_calls_made=1) but produced no usable JSON, so scoring silently defaulted. Fourth silent-fallback in the same family as the curate clobber (ERR-019) and the hardcoded category (ERR-021).",
+    "fix": "Set thinkingConfig.thinkingBudget:0 for the triage/score model + multi-part text extraction + 4096-token output headroom. Cost rose $0.0006 -> $0.0039 = real output. Verified live: score now 7 calls / 29913 tokens with real per-article scores + 14 real categories (was 1 call / 1582 tokens of empty output).",
+    "golden_rule": "When using a 'thinking' model for structured JSON extraction, disable thinking (thinkingBudget:0) or reserve explicit output headroom — reasoning tokens can starve the output and return empty JSON. And a catch that swallows a parse error into default values hides a broken AI call behind a 'healthy' run: surface it, never default silently."
   }
 ]
