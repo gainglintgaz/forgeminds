@@ -28,7 +28,13 @@ behind the slice sequence (S7 = the dogfood/alpha week).
   - NL market read: cheap gemini call → ticker_data.interpretation + prompt_version (market-read-v0.1); generate weaves real ticker/price/52w/PE + the read into finance stories.
   - Proof (dev, user 3707759d): 11/11 tracked enriched (AAPL P/E 34.9, TSLA +1.82% P/E 395, BTC $66.8k +3.9%); 9 intraday; 11 NL reads; brief story reads "TSLA closed at $406.43, up 1.82%… SPY $741.75 and QQQ $721.34 near 52-week highs"; score/enrich/generate ai_tokens all >0. Commits `abb0648` + `fd0a83c` + `c464a43`.
   - **Honest limit:** scored_articles.tickers populated for only 1 story this run — the source pool is world/macro news that rarely names a public ticker; the brief's market read is carried by the always-enriched tracked watchlist (correct design). A finance-source-weighted ingest (source-quality loop) is the lever for more story-level tickers.
-- [ ] S4 WF2 outputs (charts from intraday_json + social drafts + video prompts) · S5 action+saved-items · S6 Railway+backups · S7 dogfood week.
+- [~] **S3.1 — Stabilize unattended execution** — code DONE + verified 2026-06-15; **Railway deploy is a founder action (pending)**.
+  - Root cause confirmed (live DB): dispatcher invokes the Cloudflare Workers host (ERR-026) which kills heavy AI routes mid-run → 3 score runs dangling in `status='running'`. The serial N+1 in score made it worse.
+  - Fixes (host-independent): batch score (resolveOrCreateTickersBatch + one upsert; bad AI ids filtered; throws→`failed` never dangles); pg_cron `forgeminds_sweep_stale_runs` (*/5) heals dangling `running` rows from the DB even if the app host is dead; curate brief-consistency invariant (changed set → reset stale Claude summary to placeholder → generate re-heals).
+  - Proof (dev): score `completed` (not running), 92 scored in one batch, ai_tokens>0; sweep cleared the dangling rows; invariant reset a Claude-summary-on-mismatched-set → generate re-upgraded to claude-sonnet-4-6.
+  - **Pending (founder):** the actual Railway deploy + env vars + `UPDATE private.app_config ... forgeminds_base_url` cutover — runbook at `docs/ops/railway-cutover.md`. Agent can't deploy (no Railway creds/secrets). Commits `3a208ce` + `8ae95a9`.
+  - **Now-due:** P7 off-platform backup (architecture §6) once on the new host.
+- [ ] S4 WF2 outputs (charts from intraday_json + social drafts + video prompts) · S5 action+saved-items · S6 Railway cutover (founder) + backups · S7 dogfood week.
 
 **Known still-open (not S1 scope):** dispatcher restart on a working host (S6 Railway; Cloudflare deploy is broken per ERR-026), empty personalization (S2), single 'core' category (S2), `sources.last_fetched_at` never updated (ERR-025 ops follow-up).
 
