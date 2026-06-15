@@ -82,6 +82,29 @@ interface ArticleForBrief {
   published_at: string | null;
 }
 
+interface MarketRow {
+  symbol: string;
+  price_cents: number | null;
+  change_percent: number | null;
+  high_52w_cents: number | null;
+  low_52w_cents: number | null;
+  pe_ratio: number | null;
+  interpretation: string | null;
+}
+
+function renderMarketBlock(rows: MarketRow[]): string {
+  if (rows.length === 0) return "";
+  const usd = (c: number | null) => (c == null ? "n/a" : `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
+  const lines = rows.map((r) => {
+    const chg = r.change_percent == null ? "" : ` ${r.change_percent >= 0 ? "+" : ""}${r.change_percent.toFixed(2)}%`;
+    const range = r.high_52w_cents != null && r.low_52w_cents != null ? ` (52wk ${usd(r.low_52w_cents)}–${usd(r.high_52w_cents)})` : "";
+    const pe = r.pe_ratio != null ? ` P/E ${r.pe_ratio.toFixed(1)}` : "";
+    const read = r.interpretation ? ` — ${r.interpretation}` : "";
+    return `- ${r.symbol}: ${usd(r.price_cents)}${chg}${range}${pe}${read}`;
+  });
+  return `\n\nMARKET DATA (real, fetched live — weave the relevant figures + the read into the matching stories; use ONLY these numbers, never invent others):\n${lines.join("\n")}`;
+}
+
 /**
  * Build the prompt sent to the LLM. We deliberately constrain the model to
  * paraphrasing the article facts we provide (Layer 4 of the no-hallucination
@@ -90,7 +113,8 @@ interface ArticleForBrief {
  */
 function buildBriefPrompt(
   articles: ArticleForBrief[],
-  style: StylePrefs
+  style: StylePrefs,
+  marketData: MarketRow[] = []
 ): {
   system: string;
   user: string;
@@ -119,7 +143,7 @@ VOICE: Cynical software engineer. Short sentences. Specific. Numbers over adject
 
   const user = `Generate today's intelligence brief from these ${articles.length} curated articles:
 
-${articleList}
+${articleList}${renderMarketBlock(marketData)}
 
 Return JSON only — no markdown fences, no commentary.`;
 
@@ -251,13 +275,46 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // Call AI router. Task is "generate-brief" — router picks Grok with
-      // Gemini Flash fallback. Either way the response.content is JSON.
-      const { system, user } = buildBriefPrompt(articles as ArticleForBrief[], {
-        anchors: prefs.style_anchors,
-        tone: prefs.style_tone,
-        density: prefs.style_density,
-      });
+      // Market data for this brief's story tickers ∪ the user's tracked
+      // watchlist (latest row per symbol) → woven into the relevant finance
+      // stories (S3). Honest: only real fetched numbers. The watchlist is always
+      // available so a finance brief can surface the reader's positions.
+      let marketData: MarketRow[] = [];
+      const briefTickers = Array.from(
+        new Set([...(brief.ticker_symbols ?? []), ...(prefs.tracked_tickers ?? [])])
+      ) as string[];
+      if (briefTickers.length > 0) {
+        const { data: td } = await supabase
+          .from("ticker_data")
+          .select("symbol, price_cents, change_percent, high_52w_cents, low_52w_cents, pe_ratio, interpretation, fetched_at")
+          .eq("user_id", userId)
+          .in("symbol", briefTickers)
+          .order("fetched_at", { ascending: false });
+        const seen = new Set<string>();
+        marketData = (td ?? [])
+          .filter((r) => (seen.has(r.symbol) ? false : (seen.add(r.symbol), true)))
+          .map((r) => ({
+            symbol: r.symbol,
+            price_cents: r.price_cents,
+            change_percent: r.change_percent,
+            high_52w_cents: r.high_52w_cents,
+            low_52w_cents: r.low_52w_cents,
+            pe_ratio: r.pe_ratio,
+            interpretation: r.interpretation,
+          }));
+      }
+
+      // Call AI router. Task is "generate-brief" — router picks Claude Sonnet.
+      // Either way the response.content is JSON.
+      const { system, user } = buildBriefPrompt(
+        articles as ArticleForBrief[],
+        {
+          anchors: prefs.style_anchors,
+          tone: prefs.style_tone,
+          density: prefs.style_density,
+        },
+        marketData
+      );
       let synthesis: BriefSynthesis | null = null;
       let aiModel: string | undefined;
       let aiCostUsd = 0;
