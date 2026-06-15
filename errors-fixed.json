@@ -5,9 +5,9 @@
     "project": "ForgeMinds",
     "tag": "pipeline",
     "symptom": "Daily briefs read as a dumb heuristic RSS digest; founder called the product worse than his Pipedream finance flow.",
-    "root_cause": "pipeline_runs telemetry shows score/curate/enrich/generate made 0 AI calls across 80+ runs. The code DOES call routeAIRequest in score/route.ts and generate/route.ts, but generate processed 0 items (never picked up the briefs curate created), so briefs kept generation_model='heuristic'. An integration-seam + stale-deploy + cron-stall failure, not 'the AI is bad'.",
-    "fix": "Diagnose and fix the curate->generate hand-off (generate must select the briefs curate wrote); confirm the deployed build matches the wired code; restart the stalled dispatcher.",
-    "golden_rule": "A step reporting status='completed' is not proof it did its job. Gate the Definition of Done on runtime telemetry (ai_calls_made > 0) plus a human-rated real output. See lessons.md #104."
+    "root_cause": "CORRECTED after S1 (PS, 2026-06-14, verified vs live DB): the '0 AI calls' was a TELEMETRY GAP, not a dead AI. No route ever wrote pipeline_runs.ai_calls_made/ai_tokens_used (all 499 rows = 0) even though score (Gemini) and generate (Claude) DID fire — generate produced real claude-sonnet briefs (e.g., 05-17). What made briefs LOOK heuristic was a curate->generate CLOBBER: curate's upsert re-stamped generation_model='heuristic'/prompt_version on every 30-min tick, overwriting the Claude label generate had written (it left summary_html, producing the AI-HTML-with-'heuristic'-label contradiction). Compounded by the dispatcher stalling after 2026-06-13.",
+    "fix": "S1 (done + verified): curate no longer clobbers generate's fields (updates curation fields only; new briefs insert with summary_html NULL); telemetry now records ai_calls_made/ai_tokens_used at the router for score+generate; fail-loud watchdog flags any run that did work but made 0 AI calls; ops metric GET /api/ops/ai-telemetry. Verified live: 06-14 score=1582 tok, generate=1830 tok, brief=claude-sonnet-4-6 and stays claude on curate re-run. Commits fce39ef (seam) + 3af7400 (telemetry).",
+    "golden_rule": "An untracked metric is not evidence: ai_calls_made=0 meant 'no route wrote the column', not 'the AI never fired' — it fooled the live-DB forensics. Wire the telemetry FIRST, prove it records a known-true case, THEN trust its zero. A step reporting status='completed' still isn't proof it did its job. See lessons.md #104, #108, #111."
   },
   {
     "id": "ERR-020",
