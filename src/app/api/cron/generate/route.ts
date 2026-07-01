@@ -252,6 +252,10 @@ export async function GET(request: Request) {
     // run so pipeline_runs proves the AI fired (the §9 acceptance query).
     let aiCallsMade = 0;
     let aiTokensUsed = 0;
+    // Briefs that actually reached an AI call attempt (vs skipped for empty
+    // article_ids / failed hydration). Gates the ERR-029 fail-loud check so a
+    // legitimately-no-op tick doesn't false-positive.
+    let aiAttempts = 0;
 
     for (const brief of pendingBriefs) {
       const articleIds = (brief.article_ids ?? []) as string[];
@@ -319,6 +323,7 @@ export async function GET(request: Request) {
       let aiModel: string | undefined;
       let aiCostUsd = 0;
 
+      aiAttempts++;
       try {
         const aiRes = await routeAIRequest({
           task: "generate-brief",
@@ -368,12 +373,15 @@ export async function GET(request: Request) {
 
     const executionTime = Date.now() - startTime;
 
-    // Fail-loud telemetry watchdog (ERR-019 / ERR-025): briefs were pending but
-    // the AI never fired — the brief stays un-synthesized. Surface, don't hide.
-    const aiZeroCallWarning = pendingBriefs.length > 0 && aiCallsMade === 0;
-    if (aiZeroCallWarning) {
-      console.error(
-        `[generate] ⚠ AI-ZERO-CALL: ${pendingBriefs.length} brief(s) pending but made 0 AI calls — briefs left un-synthesized (router down? empty article_ids?). user=${userId.slice(0, 8)}`
+    // ═══ FAIL-LOUD GATE (ERR-029 / lessons #104 #111) ══════════════════════
+    // AI synthesis was ATTEMPTED and not one call succeeded (dead API key,
+    // router down). FAIL the run — the briefs keep summary_html=NULL and
+    // re-heal on the next tick, so failing loses nothing and surfaces
+    // everything. The old console-only warning let a dead key report
+    // 'completed' for 16 days (2026-06-15 → 07-01).
+    if (aiAttempts > 0 && aiCallsMade === 0) {
+      throw new Error(
+        `AI_ZERO_CALL: attempted synthesis for ${aiAttempts} brief(s), 0 AI calls succeeded — dead API key or router down? Briefs left pending for retry.`
       );
     }
 
@@ -395,7 +403,9 @@ export async function GET(request: Request) {
             prompt_version: PROMPT_VERSION + "/" + GENERATE_PROMPT_VERSION,
             ai_calls_made: aiCallsMade,
             ai_tokens_used: aiTokensUsed,
-            ...(aiZeroCallWarning ? { ai_zero_call_warning: true } : {}),
+            // ERR-029 observability: attempts vs successes (partial failures
+            // complete honestly; total failure throws AI_ZERO_CALL above).
+            ai_attempts: aiAttempts,
           },
         })
         .eq("id", run.id);

@@ -89,7 +89,15 @@ export async function GET(request: Request) {
 
     // Score articles against THIS user's interest graph (S2 personalization,
     // ERR-020). Empty arrays → relevance falls back to general importance.
-    const { scores, aiResponse, aiCallsMade, aiTokensUsed, aiCostUsd } = await scoreArticles(
+    const {
+      scores,
+      aiResponse,
+      aiCallsMade,
+      aiTokensUsed,
+      aiCostUsd,
+      mangledIdsDropped,
+      batchesFailed,
+    } = await scoreArticles(
       articles.map((a) => ({
         id: a.id,
         title: a.title,
@@ -102,6 +110,27 @@ export async function GET(request: Request) {
         excludedTopics: prefs.excluded_topics,
       }
     );
+
+    // ═══ FAIL-LOUD GATE (ERR-029 / lessons #104 #111) ══════════════════════
+    // Real work + ZERO successful AI calls = every batch degraded (dead API
+    // key, router down, provider outage). FAIL the run — do not persist
+    // anything, do not advance pipeline_status (articles stay 'fetched' and
+    // retry next tick, bounded by score_lookback_minutes). The old behavior
+    // wrote fabricated default scores and reported 'completed' — a dead key
+    // rotted silently for 16 days (2026-06-15 → 07-01) because of it.
+    if (articles.length > 0 && aiCallsMade === 0) {
+      throw new Error(
+        `AI_ZERO_CALL: ${articles.length} article(s) to score, ${batchesFailed} batch(es) attempted, 0 AI calls succeeded — dead API key or router down? Nothing persisted; articles left in 'fetched' for retry.`
+      );
+    }
+    // Partial degradation (some batches failed but the AI is alive) is honest
+    // partial success: persist what scored, leave the rest 'fetched', surface
+    // the counts in metadata.
+    if (batchesFailed > 0) {
+      console.error(
+        `[score] ⚠ PARTIAL: ${batchesFailed} batch(es) failed — their articles stay 'fetched' for retry. user=${userId.slice(0, 8)}`
+      );
+    }
 
     // Strict category resolution (ERR-021): the model's category may only map to
     // an existing canonical UUID; a miss → 'uncategorized' (flagged for review).
@@ -166,29 +195,31 @@ export async function GET(request: Request) {
 
     // ONE batch upsert (was N per-row upserts). On failure, throw → the catch
     // writes status='failed' (the run never dangles in 'running').
-    const { error: upsertErr } = await supabase
-      .from("scored_articles")
-      .upsert(rows, { onConflict: "article_id,user_id" });
-    if (upsertErr) throw new Error(`scored_articles batch upsert failed: ${upsertErr.message}`);
+    if (rows.length > 0) {
+      const { error: upsertErr } = await supabase
+        .from("scored_articles")
+        .upsert(rows, { onConflict: "article_id,user_id" });
+      if (upsertErr) throw new Error(`scored_articles batch upsert failed: ${upsertErr.message}`);
+    }
     const insertedCount = rows.length;
 
-    // Advance pipeline_status of scored articles so we don't re-pick them.
-    await supabase
-      .from("raw_articles")
-      .update({ pipeline_status: "scored" })
-      .in("id", articles.map((a) => a.id));
+    // Advance pipeline_status ONLY for articles that actually got a persisted
+    // score (ERR-029). Articles from failed batches / mangled-id drops stay
+    // 'fetched' and retry next tick — the old blanket update marked EVERYTHING
+    // 'scored', silently burying articles whose batch had failed. Retry is
+    // bounded by the score_lookback_minutes window (no infinite loop).
+    const scoredIds = rows.map((r) => r.article_id);
+    if (scoredIds.length > 0) {
+      await supabase
+        .from("raw_articles")
+        .update({ pipeline_status: "scored" })
+        .in("id", scoredIds);
+    }
 
     const executionTime = Date.now() - startTime;
-
-    // Fail-loud telemetry watchdog (ERR-019 / ERR-025): if we had real work but
-    // the AI never fired, the run is silently degraded (default scores applied).
-    // Surface it instead of reporting a clean "completed".
-    const aiZeroCallWarning = articles.length > 0 && aiCallsMade === 0;
-    if (aiZeroCallWarning) {
-      console.error(
-        `[score] ⚠ AI-ZERO-CALL: processed ${articles.length} articles but made 0 AI calls — scoring degraded to defaults (router down?). user=${userId.slice(0, 8)}`
-      );
-    }
+    // (The old console-only AI-ZERO-CALL warning lived here. It is superseded
+    // by the hard AI_ZERO_CALL throw above — a run with real work and 0 AI
+    // calls now FAILS instead of logging a warning nobody reads. ERR-029.)
 
     if (run?.id) {
       await supabase.from("pipeline_runs").update({
@@ -206,7 +237,11 @@ export async function GET(request: Request) {
           ai_calls_made: aiCallsMade,
           ai_tokens_used: aiTokensUsed,
           category_flagged_for_review: flaggedCount,
-          ...(aiZeroCallWarning ? { ai_zero_call_warning: true } : {}),
+          // ERR-028/ERR-029 observability: how often the AI corrupts ids, how
+          // many batches failed, how many articles were left for retry.
+          mangled_ids_dropped: mangledIdsDropped,
+          batches_failed: batchesFailed,
+          articles_unscored: articles.length - insertedCount,
         },
       }).eq("id", run.id);
     }

@@ -45,7 +45,23 @@ export interface ScoreRunTelemetry {
   aiTokensUsed: number;
   /** Sum of estimated USD cost across every successful batch call. */
   aiCostUsd: number;
+  /**
+   * AI-returned items dropped at parse time because their id was not one of
+   * the batch's input ids or wasn't UUID-shaped (Gemini occasionally echoes a
+   * corrupted copy of a real article id — ERR-028). Recorded in
+   * pipeline_runs.metadata so id-corruption frequency is observable.
+   */
+  mangledIdsDropped: number;
+  /**
+   * Batches whose AI call or JSON parse failed outright. Their articles get
+   * NO scores (they stay 'fetched' and retry next tick) — never fabricated
+   * defaults (ERR-027 golden rule; ERR-029 fail-loud).
+   */
+  batchesFailed: number;
 }
+
+/** Canonical UUID shape — guards the upsert against AI-mangled ids (ERR-028). */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The 13 canonical category slugs (single source of truth = source_catalog +
 // the categories table). The model MUST choose exactly one of these. Layer-1
@@ -87,7 +103,15 @@ export async function scoreArticles(
   batchSize: number = 15
 ): Promise<ScoreRunTelemetry> {
   if (articles.length === 0)
-    return { scores: [], aiResponse: null, aiCallsMade: 0, aiTokensUsed: 0, aiCostUsd: 0 };
+    return {
+      scores: [],
+      aiResponse: null,
+      aiCallsMade: 0,
+      aiTokensUsed: 0,
+      aiCostUsd: 0,
+      mangledIdsDropped: 0,
+      batchesFailed: 0,
+    };
 
   const batches: ArticleToScore[][] = [];
   for (let i = 0; i < articles.length; i += batchSize) {
@@ -102,6 +126,8 @@ export async function scoreArticles(
   let aiCallsMade = 0;
   let aiTokensUsed = 0;
   let aiCostUsd = 0;
+  let mangledIdsDropped = 0;
+  let batchesFailed = 0;
 
   const interestBlock = buildInterestBlock(interest);
 
@@ -147,7 +173,25 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
       const parsed = JSON.parse(response.content);
       const items = Array.isArray(parsed?.items) ? parsed.items : [];
 
+      // Parse-time id validation (ERR-028 layer 1): the model may only echo an
+      // id that was IN this batch's input. Anything else — a corrupted copy of
+      // a real id (one hex char dropped), a hallucinated id, a non-UUID — is
+      // dropped HERE, before it can become a ScoreResult. Never trust an
+      // AI-returned identifier verbatim (lesson #105).
+      const batchIds = new Set(batch.map((a) => a.id));
+
       for (const item of items) {
+        if (
+          typeof item?.id !== "string" ||
+          !UUID_SHAPE.test(item.id) ||
+          !batchIds.has(item.id)
+        ) {
+          mangledIdsDropped++;
+          console.error(
+            `[Scorer] Dropped AI item with mangled/unknown id: "${String(item?.id).slice(0, 45)}" (not in input batch)`
+          );
+          continue;
+        }
         const relevance = Math.min(10, Math.max(1, Number(item.relevance_score) || 5));
         const impact = Math.min(10, Math.max(1, Number(item.impact_score) || 5));
         const depth = Math.min(10, Math.max(1, Number(item.depth_score) || 5));
@@ -179,25 +223,25 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
         });
       }
     } catch (error) {
-      console.error(`Scoring batch failed: ${(error as Error).message}`);
-      // Default scores for failed batch (degraded — the route's fail-loud
-      // watchdog flags a run that made 0 AI calls).
-      for (const article of batch) {
-        allScores.push({
-          articleId: article.id,
-          relevanceScore: 5,
-          impactScore: 5,
-          depthScore: 5,
-          viralScore: 5,
-          compositeScore: 5,
-          category: "uncategorized",
-          tickers: [],
-          tone: "neutral",
-          reason: "Scoring failed — default scores applied",
-        });
-      }
+      // FAIL-LOUD (ERR-029; ERR-027 golden rule: never swallow an AI/parse
+      // failure into fabricated defaults). A failed batch contributes NO
+      // scores — its articles stay 'fetched' and retry next tick. The old
+      // behavior pushed default 5/5/5 scores here, which let a DEAD API KEY
+      // masquerade as 16 days of "completed" runs (0 real AI calls).
+      batchesFailed++;
+      console.error(
+        `[Scorer] Batch of ${batch.length} failed (no scores emitted — will retry): ${(error as Error).message}`
+      );
     }
   }
 
-  return { scores: allScores, aiResponse: lastAiResponse, aiCallsMade, aiTokensUsed, aiCostUsd };
+  return {
+    scores: allScores,
+    aiResponse: lastAiResponse,
+    aiCallsMade,
+    aiTokensUsed,
+    aiCostUsd,
+    mangledIdsDropped,
+    batchesFailed,
+  };
 }
