@@ -149,6 +149,19 @@
 - **Prerequisites:** Core brief delivery loop live (T0.2); the scheduling dispatcher already exists (`user_preferences` schedule + pg_cron) so "each morning/evening" is just a new delivery channel on the existing schedule; (for voice-DNA-styled audio) Voice DNA. Storage bucket + a TTS provider wired through `model-router.json`.
 - **Unlock trigger:** After Phase 1 (the configurable+actionable core) ships and the brief loop is proven; read-aloud MVP can be an early delivery-channel add, the produced/video tiers gate on cost proof + paid tiers.
 - **Complexity:** Read-aloud Medium; produced High; video Very high. ← promote candidate (read-aloud tier) once Phase 1 lands.
+- **Addendum (2026-07-01, founder):** xAI shipped **Grok Voice Agent Builder** (x.ai/voice — no-code voice agents, $0.05/min audio + $0.01/min telephony, MCP + tools + guardrails, 25+ languages). Two relevance vectors: (1) a candidate **TTS/voice tech** for the read-aloud / produced tiers above — evaluate at unlock against Gemini multi-speaker TTS (the Google AI Talk Radio path already noted) + ElevenLabs, on cost/quality; (2) the likely tech for an **interactive** "call ForgeMinds, it reads my brief and I ask follow-ups / it acts via MCP" agent — but that is NOT this item; it belongs to **T3.3 (agent ecosystem / Phase 9)**, gated on Trust-Ladder Loop 6+. Do not conflate the audio *delivery format* (T1.7) with the voice *agent* (T3.3). Both stay post-dogfood (lesson #110).
+
+### T1.8 — "Morning Edition": print/PDF delivery channel + (T3) multi-surface life-digest (status: DISCUSSED, founder 2026-07-01)
+- **Founder framing (verbatim, 2026-07-01):** cited the Codex example — "creates a newspaper for me every morning: unread messages, calendar, surf report, news… anything I can do to stay off my phone until later in the day is a priority." Wants the brief scheduled + exported + optionally auto-printed to a local printer.
+- **Vision (two distinct pieces, gated separately):**
+  - **(a) Print/PDF delivery channel (T1 — sibling of T1.7 audio):** on the user's existing schedule, render the brief as a **print-ready PDF** ("Morning Edition" layout) + in-app export/download. Rides the SAME `user_preferences` schedule + `deliver` step + Rule-55 delivery-channel enum that email/audio use — a new channel, not a new system.
+  - **(b) Multi-surface life-digest (T3 — integration-gated):** widen beyond news to **calendar + unread messages + weather/local** so it's a true "start your day" page. Pulls in NEW OAuth integrations (email/calendar) and **PII** (message/calendar content) → own architect-probe + privacy design (`privacy.md`: no names/PII to the AI) + own cost. Belongs with T3.5 (integrations = surface, empirical-demand-gated).
+- **Hostile-architect note (the trap):** Codex's newspaper prints because Codex runs **locally on the founder's machine**. ForgeMinds is a **cloud, multi-tenant** app — a server cannot/should not reach into each user's local printer. So the SaaS ships **print-ready PDF + email-a-PDF**; true "auto-print to my printer" is a **local-companion** concern (a tiny local agent that polls the brief API → OS print) — fine for the founder's own dogfood, NOT built into the product. Do not build cloud→printer.
+- **Why moat:** none directly — this is a **delivery channel** (surface), like T1.7. It rides ON the personalization moat (anti-patterns #2/#3: add only because it deepens the daily-habit loop, not for parity). The "stay off my phone" morning ritual is a retention driver.
+- **Prerequisites:** (a) core brief loop proven (post-S7 dogfood) + the existing schedule/deliver spine + a PDF renderer + a storage bucket. (b) OAuth integrations + PII/privacy design + cost model.
+- **Unlock trigger:** (a) after S7 dogfood — the brief must beat Pipedream first (delivering a mediocre brief as a PDF just makes it a mediocre PDF). (b) T3 / empirical demand.
+- **Complexity:** (a) Low–Medium (PDF render + one delivery-channel enum value). (b) High (multi-integration + privacy).
+- **Cross-ref:** T1.7 (audio delivery channel — same pattern, different format), T3.5 (integrations), Competitive-intel 2026-06-25 (Google Finance already ships the scheduled-briefing thesis; the wedge is breadth + action-output + audio/print, not out-financing Google).
 
 ---
 
@@ -294,6 +307,24 @@
 - **Vision:** Prompt-injection defense, data-poisoning detection, output-fingerprinting. ForgeMinds is itself resistant to attempts to corrupt its training signal.
 - **Why interesting:** B2B / regulated industries will require this eventually.
 - **Caveat:** Premature until ForgeMinds is post-PMF and has B2B customers.
+
+---
+
+## Competitive intel — 2026-06-25 (Google Finance + Google AI Talk Radio)
+
+> Logged so the read survives the handoff. **Does NOT change the critical path** (S3.2 → host fix → S4/S5 → dogfood). Anti-pattern #2 applies: add a competitor feature ONLY if it closes a loop.
+
+**Google Finance upgrade (Jun 25 2026)** — three features, mapped to ForgeMinds:
+| Google Finance | ForgeMinds | Verdict |
+|---|---|---|
+| Personalized market briefings on a schedule, tied to watchlist/portfolio, push notification | **This is FM's core** (pg_cron dispatcher + `user_preferences` schedule + `tracked_tickers` + per-user brief). | **Already have** (delivery is email/dashboard, not push — minor gap). |
+| "Key moments — why a stock moved" | FM's enrich-step NL market read + per-story analysis. | **Partial** — polish later. |
+| AI portfolio tracking (screenshots/CSV/PDF/describe → holdings → allocation Q&A) | Not present; FM tracks an *interest/reading graph*, not *holdings analytics*. | **Different surface** (closer to FinKeel). Defer; possible T3. |
+| Real-time feed / Android app | FM is a digest, web+email; mobile = T3.4. | **Deliberate non-goal for V1.** |
+
+**Strategic read:** (1) *Validation* — Google just shipped FM's exact thesis (scheduled, personalized, watchlist-tied briefings) at scale. (2) *Threat* — Google Finance is now a free, distributed competitor in the **finance vertical**. **Do NOT try to out-finance Google** (real-time data, mobile, distribution). The wedge is what Google Finance can't/won't do: **(a) breadth** — any topic, not finance-only (Layer 1); **(b) action-output** — FM drafts the post/video/podcast, Google hands you a briefing to read; **(c) the learning loop / Voice DNA**. Lean into breadth + action-output + audio.
+
+**Google AI Talk Radio (AI Studio, managed agents):** deep research → multi-host voice script → audio in ONE API call. This is the **reference architecture / likely API path for T1.7** (audio "Listen" feed) + the S4 video-prompt output — a differentiator Google Finance does NOT have. Implementation when T1.7 unlocks: don't rebuild the brief — pipe the existing `briefs` row text into a Gemini multi-speaker TTS step → store audio → per-user private podcast RSS. **Stays T1/T2 (post-dogfood); do not pull forward** (lesson #110 — prove one instance before chasing feature breadth).
 
 ---
 
