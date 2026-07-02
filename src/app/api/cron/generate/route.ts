@@ -9,6 +9,7 @@ import {
   type StyleTone,
   type StyleDensity,
 } from "@/lib/pipeline/user-prefs";
+import { validateBriefSynthesis } from "@/lib/pipeline/brief-validation";
 
 export const maxDuration = 120;
 
@@ -256,6 +257,20 @@ export async function GET(request: Request) {
     // article_ids / failed hydration). Gates the ERR-029 fail-loud check so a
     // legitimately-no-op tick doesn't false-positive.
     let aiAttempts = 0;
+    // Anti-fabrication gate telemetry (ai-first-principles.md §5 / two-way-
+    // traceability.md Pattern 3). Aggregated across briefs for the run metadata.
+    let totalClaimsChecked = 0;
+    let totalClaimsUnvalidated = 0;
+    let regeneratedCount = 0;
+    let rejectedForFabrication = 0;
+    const fabricationOffenders: string[] = [];
+    const perBriefValidation: Array<{
+      brief_id: string;
+      claims_checked: number;
+      claims_unvalidated: number;
+      regenerated: boolean;
+      persisted: boolean;
+    }> = [];
 
     for (const brief of pendingBriefs) {
       const articleIds = (brief.article_ids ?? []) as string[];
@@ -351,6 +366,80 @@ export async function GET(request: Request) {
         continue;
       }
 
+      // ═══ ANTI-FABRICATION GATE (ai-first-principles.md §5 / two-way-traceability Pattern 3) ═══
+      // The prompt asks the model to paraphrase-only; that is a request, not a guarantee. Here we
+      // PROVE it: substring-validate every number + ticker in the synthesis against the exact
+      // source the model was grounded on (article title+summary ∪ the real MARKET DATA numbers).
+      // A fabricated figure must never persist (ERR-029 / ai-native.md SS4.1 fail-closed discipline).
+      const sourceText =
+        (articles as ArticleForBrief[])
+          .map((a) => `${a.title}\n${a.summary ?? ""}`)
+          .join("\n") +
+        "\n" +
+        renderMarketBlock(marketData);
+
+      let validation = validateBriefSynthesis(synthesis.summary_text, sourceText, briefTickers);
+      let regenerated = false;
+
+      if (!validation.ok) {
+        // Regenerate ONCE with a stricter "use ONLY these exact figures" directive. If it still
+        // fails, the brief is NOT persisted (summary_html stays NULL, re-heals next tick).
+        regenerated = true;
+        regeneratedCount++;
+        const strictSystem =
+          system +
+          "\n\nSTRICT REGENERATION — your previous draft contained figures or ticker symbols that do NOT appear in the source above. Use ONLY the exact numbers, prices, percentages, and ticker symbols that appear verbatim in the provided articles and MARKET DATA block. Do not introduce, round, or infer any number or symbol that is not present in the source. If a figure is not in the source, omit it entirely.";
+        try {
+          const retryRes = await routeAIRequest({
+            task: "generate-brief",
+            prompt: user,
+            systemPrompt: strictSystem,
+            jsonMode: true,
+            maxTokens: 2000,
+          });
+          aiCallsMade += 1;
+          aiTokensUsed += (retryRes.inputTokens || 0) + (retryRes.outputTokens || 0);
+          totalCostUsd += retryRes.costEstimateUsd;
+          lastModel = retryRes.model;
+          const retrySynthesis = parseBriefResponse(retryRes.content);
+          if (retrySynthesis) {
+            synthesis = retrySynthesis;
+            aiModel = retryRes.model;
+            validation = validateBriefSynthesis(synthesis.summary_text, sourceText, briefTickers);
+          }
+          // If the retry didn't parse, `validation` keeps the failing first-pass result → not persisted.
+        } catch (err) {
+          console.error(`[Generate] Strict regeneration failed for brief ${brief.id}:`, (err as Error).message);
+          // Leave the failing `validation` in place; the brief will not persist below.
+        }
+      }
+
+      totalClaimsChecked += validation.claimsChecked;
+
+      if (!validation.ok) {
+        totalClaimsUnvalidated += validation.claimsUnvalidated;
+        rejectedForFabrication++;
+        for (const tok of validation.offendingTokens) {
+          if (fabricationOffenders.length < 20 && !fabricationOffenders.includes(tok)) {
+            fabricationOffenders.push(tok);
+          }
+        }
+        if (perBriefValidation.length < 25) {
+          perBriefValidation.push({
+            brief_id: brief.id,
+            claims_checked: validation.claimsChecked,
+            claims_unvalidated: validation.claimsUnvalidated,
+            regenerated,
+            persisted: false,
+          });
+        }
+        console.error(
+          `[Generate] Brief ${brief.id} rejected — ${validation.claimsUnvalidated} ungrounded claim(s) after ${regenerated ? "regeneration" : "first pass"}: ${validation.offendingTokens.join(", ")}`
+        );
+        failedCount++;
+        continue;
+      }
+
       const { error: updateErr } = await supabase
         .from("briefs")
         .update({
@@ -366,6 +455,16 @@ export async function GET(request: Request) {
         console.error(`[Generate] Brief update failed: ${updateErr.message}`);
         failedCount++;
         continue;
+      }
+
+      if (perBriefValidation.length < 25) {
+        perBriefValidation.push({
+          brief_id: brief.id,
+          claims_checked: validation.claimsChecked,
+          claims_unvalidated: 0,
+          regenerated,
+          persisted: true,
+        });
       }
 
       generatedCount++;
@@ -406,6 +505,17 @@ export async function GET(request: Request) {
             // ERR-029 observability: attempts vs successes (partial failures
             // complete honestly; total failure throws AI_ZERO_CALL above).
             ai_attempts: aiAttempts,
+            // Anti-fabrication gate (ai-first-principles.md §5 / two-way-traceability
+            // Pattern 3). Persisted briefs have claims_unvalidated=0 by construction;
+            // rejected briefs (ungrounded number/ticker) are logged for forensics.
+            validation: {
+              total_claims_checked: totalClaimsChecked,
+              total_claims_unvalidated: totalClaimsUnvalidated,
+              regenerated_count: regeneratedCount,
+              rejected_for_fabrication: rejectedForFabrication,
+              offending_tokens: fabricationOffenders,
+              per_brief: perBriefValidation,
+            },
           },
         })
         .eq("id", run.id);

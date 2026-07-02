@@ -15,6 +15,7 @@
     "verify:env-vars": "tsx scripts/verify-env-vars.ts",
     "verify:phase-0": "tsx scripts/verify-phase-0.ts",
     "verify:phase-0:no-e2e": "tsx scripts/verify-phase-0.ts --skip-e2e",
+    "test:brief-validation": "tsx scripts/test-brief-validation.ts",
     "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
     "verify:cron-empty-handling": "tsx scripts/verify-cron-empty-handling.ts",
     "verify:pg-cron-success": "tsx scripts/verify-pg-cron-success.ts",
