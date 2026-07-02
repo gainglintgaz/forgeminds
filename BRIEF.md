@@ -31,8 +31,8 @@ Plan 1: Foundation + Pipeline (replaces Pipedream $30/mo)
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase | **public** | `.env.local`, host env, browser | pre-existing | n/a (RLS-gated; not rotated — clean) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase | **secret** | `.env.local`, host env (server only) | pre-existing | not rotated (clean; dev) |
 | `CRON_SECRET` | internal (self-generated) | **secret** | host env **+** Supabase vault `cron_secret` (must match) | pre-existing | set in Railway at cutover |
-| `GEMINI_API_KEY` | Google AI Studio (GCP `premium-highway-391317`) | **secret** | `.env.local`, host env | 2026-07-01 | 2026-09-29 |
-| `ANTHROPIC_API_KEY` | Anthropic | **secret** | `.env.local`, host env | 2026-07-01 | 2026-09-29 |
+| `ANTHROPIC_API_KEY` | Anthropic | **secret** | `.env.local`, host env — powers **score (Haiku) + generate (Sonnet)** = the whole core loop | 2026-07-01 | 2026-09-29 |
+| ~~`GEMINI_API_KEY`~~ | Google | ~~secret~~ | **RETIRED 2026-07-02** — dropped from the router (DECISIONS 2026-07-02: postpay-no-cap billing + ERR-027/028). Revoke in Google Cloud + `wrangler secret delete GEMINI_API_KEY` **after** the Anthropic bundle deploys + verifies. | — | n/a |
 | `FINNHUB_API_KEY` | Finnhub | **secret** | `.env.local`, host env | pre-existing | next quarterly |
 | `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | Alpaca | **secret** | `.env.local`, host env | pre-existing | next quarterly |
 | `ALPHA_VANTAGE_KEY` | Alpha Vantage | **secret** | `.env.local`, host env | pre-existing | next quarterly |
