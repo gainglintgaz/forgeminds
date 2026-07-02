@@ -8,9 +8,17 @@ import { callPerplexity } from "./providers/perplexity";
 // `embed` is intentionally NOT routed here — embeddings have a
 // vector-shaped response that doesn't fit AIResponse. Call
 // `embedText()` from `./providers/openai` directly instead.
+// Consolidated onto Anthropic 2026-07-02 (DECISIONS.md): score/categorize moved
+// Gemini Flash → Claude Haiku. Reasons: (1) Gemini's postpay-no-cap billing
+// caused the $300 EaseAway burn — no prepaid hard-stop; (2) Gemini was the
+// source of BOTH scoring output-quirk bugs (ERR-027 thinking-token JSON
+// starvation, ERR-028 UUID corruption). One prepaid-cappable vendor for the
+// whole core loop (Haiku score + Sonnet generate) = simpler + safer. Gemini's
+// ~3× cheaper input is immaterial at solo-dogfood volume. Revisit a cheap bulk
+// model at scale via T1.5 provider A/B (backlog), NOT before.
 const TASK_MODEL_MAP: Record<TaskType, ModelProvider> = {
-  "score": "gemini-flash",
-  "categorize": "gemini-flash",
+  "score": "claude-haiku",
+  "categorize": "claude-haiku",
   "generate-social": "grok",
   "generate-brief": "claude-sonnet",     // brief synthesis: writing quality matters
   "generate-blog": "claude-sonnet",      // long-form content: voice + structure
@@ -19,14 +27,16 @@ const TASK_MODEL_MAP: Record<TaskType, ModelProvider> = {
   "research": "perplexity",              // live-web grounded research
 };
 
-// Fallback chain: if primary fails, try these in order. Skip routing
-// to providers that produce a fundamentally different response shape
-// (embeddings, citations) — those are explicit-call APIs.
+// Fallback chain: if primary fails, try these in order. Skip routing to
+// providers with a different response shape (embeddings, citations).
+// Gemini removed from every fallback too (dropped provider). grok/perplexity
+// keys are NOT provisioned (Phase-2/3 deferred), so fallbacks stay on the
+// LIVE Anthropic tiers — nothing should fall back onto a dead/unprovisioned key.
 const FALLBACK_CHAIN: Record<ModelProvider, ModelProvider[]> = {
-  "gemini-flash": ["grok", "claude-haiku"],
-  "grok": ["gemini-flash", "claude-haiku"],
-  "claude-haiku": ["grok", "gemini-flash"],
-  "claude-sonnet": ["claude-haiku", "grok"],
+  "gemini-flash": ["claude-haiku"],      // dropped provider; never routed here
+  "grok": ["claude-haiku"],              // social (Phase 3) → fall to a live vendor
+  "claude-haiku": ["claude-sonnet"],     // stay on Anthropic (both live)
+  "claude-sonnet": ["claude-haiku"],
   "openai-embeddings": [],
   "perplexity": ["claude-sonnet"],       // research → fall back to a smart text model
   "local": [],

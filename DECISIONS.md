@@ -723,3 +723,35 @@ The correct response is NOT to ship more pipeline modules on a foundation that h
 **Cross-references:** `docs/architecture/forgeminds-v1-finance-core.md` §0/§6; errors-fixed.json ERR-026.
 
 ---
+
+## 2026-06-25 — Competitive intel: Google Finance upgrade + Google AI Talk Radio (validation + wedge, no pivot)
+
+**Decision:** Treat the Jun-25-2026 Google Finance upgrade as **validation of the thesis, not a feature backlog to copy**, and keep the critical path unchanged. Google Finance now ships "scheduled, personalized, watchlist-tied market briefings with push delivery" — which is **ForgeMinds' exact core** (already built: pg_cron dispatcher + `user_preferences` + per-user brief). Do NOT try to out-finance Google (real-time data, mobile app, distribution). Sharpen the wedge to the three things Google Finance can't/won't do: **(a) breadth** (any topic — Layer 1 universal; Google is finance-only), **(b) action-output** (FM drafts the post/video/podcast; Google hands you a briefing to read), **(c) the learning loop / Voice DNA**. Log **Google AI Talk Radio** (AI Studio managed-agents: deep research → multi-host voice script → audio in one call) as the reference architecture for the **T1.7 audio "Listen" feed + S4 video-prompt** outputs — a differentiator Google lacks.
+
+**Why:** A competitor shipping your core at scale is a buy signal for the direction, not a reason to chase parity. The defensible edge is breadth + does-the-work outputs + compounding per-user data, none of which a finance-only terminal provides. Audio is a daily-habit retention driver that rides ON the personalization moat (it doesn't substitute for it).
+
+**Rejected alternatives:** Pivot to finance-only to compete head-on with Google Finance (loses on data/distribution/mobile; contradicts the 2026-06-14 broad-engine decision). Build the portfolio-from-screenshot/CSV holdings tracker now (different product surface — holdings analytics, closer to FinKeel; doesn't close a loop yet; defer to ~T3). Pull the audio/video features forward before the dogfood (anti-pattern #2 + lesson #110 — over-build before proving one instance).
+
+**Cross-references:** `IDEAS_BACKLOG.md` "Competitive intel — 2026-06-25" + T1.7; `CURSOR_HANDOFF.md` §12; lesson #110; the 2026-06-14 broad-engine + finance-first decisions above.
+
+---
+
+---
+
+## 2026-07-02 -- Core-loop AI consolidated onto Anthropic; Gemini dropped
+
+**Decision:** Route `score` + `categorize` to Claude Haiku 4.5 (was Gemini 2.5 Flash); keep `generate-brief` on Claude Sonnet 4.6. Gemini removed from every route AND fallback chain in `src/lib/ai/router.ts`. The core loop is now a single prepaid-cappable vendor (Anthropic).
+
+**Why (3 reasons):**
+1. **Billing safety.** Gemini/Google is postpay with no hard dollar stop (budgets only alert; quota only throttles rate) -- the exact mechanism behind the ~$300 EaseAway key-leak burn. Anthropic supports prepaid credits + per-workspace spend limits = a real ceiling. Grok/OpenAI/Perplexity are also prepaid-safe but add a second vendor.
+2. **Quality/truthfulness.** Gemini was the source of BOTH recent scoring bugs -- ERR-027 (thinking-token JSON starvation -> silent default scores) and ERR-028 (UUID corruption). Dropping it removes that output-quirk class from the scoring step.
+3. **Simplicity.** One vendor, one key, one prepaid cap for the whole loop; the Anthropic key was already set up this session.
+
+**Cost tradeoff (accepted):** Haiku scoring (~$8/mo at solo volume) vs Gemini Flash (~$3/mo) = ~$5/mo more. Immaterial at dogfood scale; bought structural safety + simplicity. Generate is ~1 call/cadence so model cost is a rounding error there -- quality/faithfulness drives that slot, not price.
+
+**Deferred (NOT done here):**
+- **Opus 4.8 for generate** (quality-max): needs a new Claude tier in the router (models.ts pin + provider variant + type + cost) -- a small follow-up slice. Sonnet 4.6 is ~95% of the quality and already wired, so generate is Anthropic + excellent today.
+- **Substring-validation gate on generate** (the real anti-hallucination guarantee, model-agnostic): NOT implemented -- generate currently grounds only via prompt ("paraphrase only, invent nothing"), no server-side check. Highest-ROI truthfulness slice next.
+- **Provider A/B (T1.5):** once the loop runs, let save/dismiss/edit outcomes -- not opinion -- decide if Grok/GPT beat Claude for generate.
+
+**Reversibility:** router is a config map; re-adding a cheap bulk model at scale = a few lines + a provisioned key + its budget guard. One-way door: no.
