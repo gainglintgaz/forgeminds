@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Feed", icon: "📡" },
   { href: "/briefs", label: "Briefs", icon: "📰" },
+  { href: "/saved", label: "Saved", icon: "🔖" },
   { href: "/sources", label: "Sources", icon: "🔗" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
