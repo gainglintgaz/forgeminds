@@ -1,0 +1,14 @@
+-- Restore the ORIGINAL service_role-only intent of forgeminds_pg_cron_stats().
+--
+-- The function is SECURITY DEFINER (ops introspection over pg_cron/pipeline stats).
+-- Its creating migration (20260512000001) did `revoke all ... from public; grant
+-- execute ... to service_role`. A later blanket grants-restoration migration (the
+-- lesson #96 drop-schema-then-re-grant pattern) re-granted EXECUTE to anon +
+-- authenticated across the whole schema, silently re-exposing this function so that
+-- ANYONE with the public anon key could read pipeline/cron operational stats via a
+-- PostgREST RPC (recon surface). Advisor: anon_security_definer_function_executable.
+--
+-- Fix (review 2026-07-03, finding C-3): re-revoke from anon + authenticated. The only
+-- caller is scripts/verify-pg-cron-success.ts, which runs as service_role (retains
+-- EXECUTE). No src/ runtime or browser code calls it. Idempotent + reversible.
+revoke execute on function public.forgeminds_pg_cron_stats(integer) from anon, authenticated;
