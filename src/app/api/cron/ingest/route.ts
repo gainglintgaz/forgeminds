@@ -189,6 +189,25 @@ export async function GET(request: Request) {
       }
     }
 
+    // Mark the fetched source types as fetched now (review C-4 / ERR-025). Without
+    // this, sources.last_fetched_at stays NULL forever and any "source health"
+    // display lies + staleness is undetectable. Single .in() update (no N+1, VIBE 53);
+    // scoped by type because the fetchers run per-type, not per-source-row.
+    const invokedTypes = results.map((r) => r.source);
+    if (invokedTypes.length > 0) {
+      const { error: srcErr } = await supabase
+        .from("sources")
+        .update({ last_fetched_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .in("type", invokedTypes);
+      if (srcErr) {
+        // Non-fatal: the articles already landed; a stale health timestamp must
+        // not fail the ingest run. Log with context (VIBE 52), don't swallow.
+        console.error(`[Ingest] sources.last_fetched_at update failed: ${srcErr.message}`);
+      }
+    }
+
     const executionTime = Date.now() - startTime;
 
     if (run?.id) {
