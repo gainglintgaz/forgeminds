@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+// Only real, reachable routes here. Dead "Soon" stubs (Archive/Content/Analytics —
+// Phase 3-6 features that don't exist yet) were removed 2026-07-03: a grey link that
+// goes nowhere is dead UI (VIBE Rule 51) and vague "Soon" is banned (GOAL §4.3). They
+// return as real nav items when their pages ship — not before (review U-2 / C-5).
 const navItems = [
   { href: "/dashboard", label: "Feed", icon: "📡" },
   { href: "/briefs", label: "Briefs", icon: "📰" },
   { href: "/sources", label: "Sources", icon: "🔗" },
-  { href: "/archive", label: "Archive", icon: "🧠", disabled: true },
-  { href: "/content", label: "Content", icon: "✍️", disabled: true },
-  { href: "/analytics", label: "Analytics", icon: "📊", disabled: true },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
@@ -27,20 +28,16 @@ export function Sidebar() {
         {navItems.map((item) => (
           <Link
             key={item.href}
-            href={item.disabled ? "#" : item.href}
+            href={item.href}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
               pathname === item.href
                 ? "bg-zinc-200 text-zinc-900 font-medium"
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-              item.disabled && "opacity-40 pointer-events-none"
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
             )}
           >
             <span>{item.icon}</span>
             <span>{item.label}</span>
-            {item.disabled && (
-              <span className="ml-auto text-xs text-zinc-400">Soon</span>
-            )}
           </Link>
         ))}
       </nav>

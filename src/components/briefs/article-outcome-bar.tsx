@@ -45,6 +45,9 @@ interface ArticleOutcomeBarProps {
   initialOutcome: Outcome;
   initialRating: number | null;
   initialUpdatedAt?: string | null;
+  /** Fires (optimistically, and again on revert) whenever the outcome changes,
+   *  so a parent can react — e.g. collapse the card when it becomes "dismissed". */
+  onOutcomeChange?: (outcome: Outcome) => void;
 }
 
 export function ArticleOutcomeBar({
@@ -53,6 +56,7 @@ export function ArticleOutcomeBar({
   initialOutcome,
   initialRating,
   initialUpdatedAt = null,
+  onOutcomeChange,
 }: ArticleOutcomeBarProps) {
   const [outcome, setOutcome] = useState<Outcome>(initialOutcome);
   const [rating, setRating] = useState<number | null>(initialRating);
@@ -75,6 +79,7 @@ export function ArticleOutcomeBar({
     setOutcome(nextOutcome);
     if (nextRating !== null) setRating(nextRating);
     setError(null);
+    onOutcomeChange?.(nextOutcome);
 
     startTransition(async () => {
       const { error: rpcError } = await supabase.rpc(
@@ -98,6 +103,7 @@ export function ArticleOutcomeBar({
         setRating(prevRating);
         setUpdatedAt(prevUpdatedAt);
         setError(`Couldn't save — ${rpcError.message}`);
+        onOutcomeChange?.(prevOutcome);
         return;
       }
       // RPC succeeded — record the click time for the ⓘ tooltip.

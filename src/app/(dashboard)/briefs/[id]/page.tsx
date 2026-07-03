@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArticleOutcomeBar, type Outcome } from "@/components/briefs/article-outcome-bar";
+import { type Outcome } from "@/components/briefs/article-outcome-bar";
+import { ArticleCardBody } from "@/components/briefs/article-card-body";
 
 // Per-render dynamic — outcomes change on every save/dismiss click and
 // the page should reflect them on refresh. revalidate disabled.
@@ -267,22 +268,22 @@ export default async function BriefDetailPage({
                     </p>
                   </CardHeader>
                   <CardContent className={article.summary ? undefined : "pt-0"}>
-                    {article.summary ? (
-                      <p className="text-sm text-zinc-600 leading-relaxed line-clamp-3 mb-2">
-                        {article.summary}
-                      </p>
-                    ) : null}
-                    {/* Outcome bar — auth-gated server-side via RLS; if user
-                        is somehow unauthenticated we still render a disabled
-                        bar but the RPC will reject. */}
+                    {/* Outcome bar + summary live in a client body so Dismiss
+                        collapses the card (review U-6). Auth-gated: unauthenticated
+                        users see the summary only (no bar; the RPC would reject). */}
                     {user ? (
-                      <ArticleOutcomeBar
+                      <ArticleCardBody
                         articleId={article.id}
                         briefId={brief.id}
+                        summary={article.summary}
                         initialOutcome={stored?.outcome ?? "no_action"}
                         initialRating={stored?.rating ?? null}
                         initialUpdatedAt={stored?.updated_at ?? null}
                       />
+                    ) : article.summary ? (
+                      <p className="text-sm text-zinc-600 leading-relaxed line-clamp-3 mb-2">
+                        {article.summary}
+                      </p>
                     ) : null}
                   </CardContent>
                 </Card>
