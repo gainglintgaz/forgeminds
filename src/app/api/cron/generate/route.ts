@@ -10,6 +10,7 @@ import {
   type StyleDensity,
 } from "@/lib/pipeline/user-prefs";
 import { validateBriefSynthesis } from "@/lib/pipeline/brief-validation";
+import { sanitizeBriefHtml } from "@/lib/pipeline/html-sanitize";
 
 export const maxDuration = 120;
 
@@ -444,7 +445,10 @@ export async function GET(request: Request) {
         .from("briefs")
         .update({
           title: synthesis.headline.slice(0, 200),
-          summary_html: synthesis.summary_html,
+          // Sanitize AI HTML at the single persist choke point (review C-6): every
+          // consumer (dashboard dangerouslySetInnerHTML + delivery email) then reads
+          // already-safe HTML, closing the stored-XSS surface.
+          summary_html: sanitizeBriefHtml(synthesis.summary_html),
           summary_text: synthesis.summary_text,
           generation_model: aiModel ?? "unknown",
           prompt_version: PROMPT_VERSION + "/" + GENERATE_PROMPT_VERSION,
