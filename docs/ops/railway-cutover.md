@@ -1,5 +1,9 @@
 # Railway cutover runbook (S3.1 / Appendix B S6)
 
+> **🔴 SUPERSEDED 2026-07-03 — DO NOT USE.** The host decision changed to **Vercel** (Railway
+> discontinued its free tier). Follow **`docs/ops/vercel-cutover.md`** instead. This file is kept
+> for history only. See `DECISIONS.md` (2026-07-03 host entry) + review §3.1.
+
 > **Status:** prepared 2026-06-15. The code hardening that makes the pipeline robust on ANY host is
 > DONE + verified (batch score, stale-run sweep, curate consistency invariant). **The actual Railway
 > deploy + secret-setting + dispatcher cutover below is a founder action** — it needs your Railway

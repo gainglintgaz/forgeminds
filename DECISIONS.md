@@ -755,3 +755,19 @@ The correct response is NOT to ship more pipeline modules on a foundation that h
 - **Provider A/B (T1.5):** once the loop runs, let save/dismiss/edit outcomes -- not opinion -- decide if Grok/GPT beat Claude for generate.
 
 **Reversibility:** router is a config map; re-adding a cheap bulk model at scale = a few lines + a provisioned key + its budget guard. One-way door: no.
+
+---
+
+## 2026-07-03 — App host: Vercel (supersedes 2026-06-14 Railway; restores the original 2026-04-13 choice)
+
+**Decision:** Deploy the Next.js app to **Vercel** — Hobby during dogfood/closed alpha; **Pro $20/mo mandatory at first commercial use** (Vercel fair-use: Hobby is non-commercial). `private.app_config.forgeminds_base_url` → `https://forgeminds-<hash>.vercel.app`. Supabase remains the host-independent brain; the host stays swappable (Fly.io / Render fallbacks). Runbook: `docs/ops/vercel-cutover.md`.
+
+**Why:** Cloudflare Workers can't run the heavy AI routes (ERR-026); Railway (the 2026-06-14 choice) discontinued its free tier; Vercel is Next.js-native (no OpenNext layer → the ERR-026 class is removed), 300s max duration covers the 120s routes, pg_cron does all scheduling so Hobby's 1/day cron cap is irrelevant, and dispatcher volume (~260k invocations/mo) fits the 1M free allowance. This is a return to the original 2026-04-13 stack decision after the Cloudflare + Railway detours.
+
+**Caveat (accepted):** Hobby is non-commercial-only — the Pro upgrade is a launch-day line item tracked in the GTM checklist (review §7.2), not a today cost.
+
+**Rejected:** staying on Cloudflare (ERR-026, proven in production — ~0 AI calls for weeks); Railway paid (~$5–10/mo for zero advantage over Vercel's $0).
+
+**Deploy status:** founder-scheduled (chosen 2026-07-03: "deploy later"). Until it lands and `ai_calls_made>0` verifies, the committed fix bundle (654113d fail-loud, b8ff95d Anthropic-only, d46cac0 substring gate) is NOT live and every brief is empty heuristic (ERR-029). This is THE blocker for the S7 dogfood.
+
+**Reference:** review `docs/reviews/2026-07-03-comprehensive-review.md` §3.1; `docs/ops/vercel-cutover.md`; supersedes `docs/ops/railway-cutover.md`.
