@@ -10,9 +10,9 @@
 
 ## §0 — What this project is
 
-ForgeMinds is a personal intelligence OS. Pipeline: RSS / API ingest → AI scoring (Gemini Flash) → curation (per-user density caps) → brief generation (Claude Haiku via the AI router) → user outcomes (save / dismiss / rate) → flywheel re-scores tomorrow's pick.
+ForgeMinds is a personal intelligence OS. Pipeline: RSS / API ingest → AI scoring (Claude Haiku) → curation (per-user density caps) → brief generation (Claude Sonnet via the AI router) → user outcomes (save / dismiss / rate) → flywheel re-scores tomorrow's pick. (Gemini retired from the core loop 2026-07-01, commit `b8ff95d`; all AI runs through `src/lib/ai/router.ts` — Anthropic core loop.)
 
-**Stack:** Next.js 16 App Router, Tailwind v4, shadcn/ui (new-york), Supabase Postgres + Auth + pg_cron + pg_vector + Realtime, Vercel Fluid Compute, Stripe billing, Resend email.
+**Stack:** Next.js 16 App Router, Tailwind v4, shadcn/ui (new-york), Supabase Postgres + Auth + pg_cron + pg_vector + Realtime, Vercel host (Hobby during dogfood — supersedes Railway/Cloudflare, DECISIONS 2026-07-03), Stripe billing, Resend email (test mode).
 
 **Architecture:** Smart Monolith with module boundaries at `src/lib/`. Modules communicate via the `jobs` table, not via direct imports.
 
