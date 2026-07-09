@@ -117,7 +117,7 @@ export async function GET(request: Request) {
     // user prefs — no hardcoded literals (factory rule §17 / VIBE Rule 55).
     // category is now the resolved canonical slug (S2), so maxPerCategory
     // genuinely diversifies across finance/geopolitics/tech/... not one 'core'.
-    const curated = curateStories(
+    const { selected: curated, entityCapExclusions } = curateStories(
       freshScored.map((s) => ({
         articleId: s.article_id,
         relevanceScore: Number(s.relevance_score) * 10,
@@ -271,12 +271,17 @@ export async function GET(request: Request) {
         items_created: curated.length,
         duration_ms: executionTime,
         completed_at: new Date().toISOString(),
+        // entity_cap_exclusions (H1 fix 1): proves the maxPerEntity cap actually
+        // fires and is observable — the fix for the original silent-dead-knob
+        // bug where this cap was read from config but never checked anywhere.
+        metadata: { entity_cap_exclusions: entityCapExclusions },
       }).eq("id", run.id);
     }
 
     return NextResponse.json({
       scoredIn: scored.length,
       curated: curated.length,
+      entityCapExclusions,
       categories: Object.fromEntries(
         curated.reduce((map, s) => {
           map.set(s.category, (map.get(s.category) || 0) + 1);

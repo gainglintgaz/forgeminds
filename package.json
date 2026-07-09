@@ -17,6 +17,7 @@
     "verify:phase-0:no-e2e": "tsx scripts/verify-phase-0.ts --skip-e2e",
     "test:brief-validation": "tsx scripts/test-brief-validation.ts",
     "test:html-sanitize": "tsx scripts/test-html-sanitize.ts",
+    "test:entity-cap": "tsx scripts/test-entity-cap.ts",
     "verify:cron-routes": "tsx scripts/verify-cron-routes.ts",
     "verify:cron-empty-handling": "tsx scripts/verify-cron-empty-handling.ts",
     "verify:pg-cron-success": "tsx scripts/verify-pg-cron-success.ts",
