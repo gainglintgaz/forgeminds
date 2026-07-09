@@ -4,6 +4,24 @@
 
 ---
 
+## 🟢 2026-07-09 E-SLICE STATUS — the active path is `docs/architecture/v1-execution-plan-2026-07-08.md` (supersedes the S1–S7 list below)
+
+The 2026-07-08 honest audit (`docs/reviews/2026-07-08-honest-audit.md`) reconciled the S-slices into E-slices. Live state:
+
+- [x] **E0 — deploy-readiness (mostly done).** `master` reattached; pushed through `ee886a3`; the 2 newest commits (`a8f31d2` E2 + `eb0d09f` H1 arch doc) await founder-OK push. C-12 rule-mirrors disabled + committed (`5565780`).
+- [x] **E1 — finance-first brief BUILT + PROVEN LOCALLY** (commit `1123f8b`, 2026-07-09): curation reads the interest graph (excluded-categories gate), hard `min_relevance_score` floor (per-user Layer-2 config), finance-scoped source pool, and the root-cause JSON-fence-strip parse fix that restored real per-article scoring. Local run: fully finance-first brief, zero generic-news leak. **🧑 Founder read PENDING — judge the brief vs Pipedream (the E1 gate).**
+- [x] **E2 — tickers + market data BUILT + PROVEN LOCALLY** (commit `a8f31d2`, 2026-07-09): ticker extraction broadened to company names (confidence-gated, strict-resolution preserved); `briefs.ticker_symbols` now unions the watchlist — `n_tickers` 1 → 11; 16 articles with tickers in 24h; brief weaves real BTC/ETH + SPY/QQQ/NVDA/AAPL prices, anti-fabrication gate passing. **🧑 Founder read PENDING.**
+- [ ] **H1 — curation-hardening ARCHITECTURE.md committed** (`eb0d09f` → `docs/architecture/curation-hardening-vra.md`). **🧑 PENDING founder "build approved" on its §7 assumptions.** No H1 code until then.
+- [ ] **I1 — insight-layer architect-probe** running in a parallel session → will land `docs/architecture/insight-layer.md`. **🧑 approval will be needed when it lands.**
+- [ ] **E3 — WF2 outputs** (chart + social draft + video prompt in brief/email): the next 🤖 build once the founder gates above clear. Then E4/E5 per plan; Tier A causal-why possibly before the E6 dogfood.
+- [ ] **E6 — host cutover + P7 backup + dogfood week** (founder-led; the V1 verdict).
+
+**Known / parked:** the stale Cloudflare dispatcher still runs the pre-fix bundle and writes legacy `diversity_category='core'` rows into the dev DB every ~30 min — known contamination, parked until the E6 cutover. ERR-029 stays OPEN until the E6 live-cron proof (`ai_calls_made>0` unattended).
+
+**Next founder actions (in order):** (1) read the E1/E2 locally-generated brief and judge it vs Pipedream; (2) approve/reject H1's §7 assumptions ("build approved"); (3) later, same for I1. **Next build after approvals:** E3 per plan + H1 build.
+
+---
+
 ## 🔁 2026-06-14 DRAWING-BOARD RESET — supersedes the Phase 2 plan below
 
 The active path is now the founder-APPROVED finance-core V1 in

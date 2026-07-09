@@ -9,11 +9,11 @@
 
 ## What this project is
 
-A personal intelligence OS. Ingest news + research from user-chosen sources → AI-score per user → curate via density caps → generate brief via Claude Haiku → user captures outcomes (save / dismiss / rate) → flywheel sharpens tomorrow's pick.
+A personal intelligence OS. Ingest news + research from user-chosen sources → AI-score per user (Claude Haiku) → curate via density caps → generate brief via Claude Sonnet → user captures outcomes (save / dismiss / rate) → flywheel sharpens tomorrow's pick.
 
 ## Stack
 
-Next.js 16 (App Router, Turbopack) · Tailwind v4 · shadcn/ui new-york · Supabase Postgres + Auth + pg_cron + pg_vector + Realtime · Vercel Fluid Compute · Stripe billing · Resend transactional email · AI router (`src/lib/ai/router.ts`) for all Gemini / Claude / Grok / Perplexity calls.
+Next.js 16 (App Router, Turbopack) · Tailwind v4 · shadcn/ui new-york · Supabase Postgres + Auth + pg_cron + pg_vector + Realtime · **Vercel host** (Hobby during dogfood; supersedes Railway/Cloudflare — DECISIONS 2026-07-03) · Stripe billing · Resend transactional email (test mode) · AI router (`src/lib/ai/router.ts`) for ALL AI calls — **Anthropic core loop: Haiku scores, Sonnet generates** (Gemini retired from the core loop 2026-07-01, commit `b8ff95d`; Grok/Perplexity are Phase-3+ fallback-mapped, never routed today).
 
 ## Project conventions (every commit)
 

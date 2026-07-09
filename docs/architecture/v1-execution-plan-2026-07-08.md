@@ -51,10 +51,10 @@
 
 **The 3 audit brief-fixes (🤖 — the plan under-specified these):**
 
-- [ ] **Fix 1 — curation reads the interest graph.** `curateStories()` currently picks "best from every category present," blind to the user (`curator.ts:17-47`). Change its signature to receive the user's `topics` + `excluded_topics`, drop any article whose resolved category is in `excluded_topics`, and rank within finance-relevant categories. Verify locally that a run excludes off-interest stories.
-- [ ] **Fix 2 — hard relevance floor.** Add a hard minimum `relevance_score` gate at curation (not just the 0.45 *composite* floor where relevance is only 45% of the weight). A world-news item that scores low on finance-relevance must NOT get a category-diversity seat. Make the floor a `user_preferences` value (Layer-2 config, per constraint 2), default tuned for finance.
-- [ ] **Fix 3 — scope the source pool.** The `sources` table contains generic `bbci.co.uk/news/world` + `theguardian.com/world` competing for slots. For the finance proving-ground user, deprioritize/remove generic world feeds; keep Fed/ECB/markets/econ finance feeds. This is a data change to the user's `sources`, not code (Layer-2).
-- [ ] **Local proof:** run the pipeline locally (`npm run dev` + trigger score→curate→generate against dev DB with real keys) and confirm a generated brief is finance-relevant with the user's tickers/topics leading, no generic-news leak.
+- [x] **Fix 1 — curation reads the interest graph.** — DONE 2026-07-09, commit `1123f8b`. `curateStories()` gates the eligible set on the user's `excluded_topics` (resolved to excluded categories) before Pass 1's diversity seats; empty-eligible returns `[]` (honest quiet day), never a fabricated fallback.
+- [x] **Fix 2 — hard relevance floor.** — DONE 2026-07-09, commit `1123f8b`. New `user_preferences.min_relevance_score` column (Layer-2 per-user config, VIBE Rule 55) wired through `user-prefs.ts` → `curate/route.ts` → `curator.ts`; separate from the 0.45 composite floor. Bonus root-cause: `scorer.ts` now strips ```json fences before `JSON.parse` — every score batch had been silently failing on this, so no article had ever received a real personalized relevance score locally.
+- [x] **Fix 3 — scope the source pool.** — DONE 2026-07-09, commit `1123f8b` (data change: `supabase/seeds/user_sources/3707759d_finance_scope.sql` — generic world feeds out, Fed/ECB/markets/econ feeds kept).
+- [x] **Local proof:** — DONE 2026-07-09 (commit `1123f8b` verification): local score→curate→generate against dev DB with real Claude calls produced a fully finance-first brief, zero generic-news leak (after clearing a legacy contamination batch traced to the still-undeployed pre-fix pipeline, not this fix).
 
 **Gate (LOCAL — no deploy needed):**
 ```sql
@@ -72,9 +72,9 @@ from briefs order by brief_date desc limit 3;   -- generation_model = claude-*, 
 
 **Files:** `src/lib/pipeline/scorer.ts` (ticker extraction), `src/lib/entities/resolver.ts`, `src/app/api/cron/curate/route.ts` (aggregate story tickers → `briefs.ticker_symbols`), `src/app/api/cron/enrich/route.ts`, `src/app/api/cron/generate/route.ts` (weave market data into story text).
 
-- [ ] 🤖 Make story-level ticker extraction fire broadly (not on 1 article ever). Resolve to existing entity UUIDs (never invent — ERR-021 contract).
-- [ ] 🤖 Populate `briefs.ticker_symbols` from the curated stories' tickers ∪ the watchlist.
-- [ ] 🤖 Ensure `generate` weaves the real `ticker_data` price/change/52w/PE + NL market read into the story prose (the design's §4 forward flow).
+- [x] 🤖 Make story-level ticker extraction fire broadly (not on 1 article ever). — DONE 2026-07-09, commit `a8f31d2` (+ the E1 fence-parse fix in `1123f8b`, which restored extraction as a side effect): TICKERS prompt broadened to resolve from company names, confidence-gated; still flows through `resolveOrCreateTickersBatch`'s strict check (ERR-021 contract). Verified locally: 13–16 of 41 finance articles resolve tickers (16 articles with tickers in 24h).
+- [x] 🤖 Populate `briefs.ticker_symbols` from the curated stories' tickers ∪ the watchlist. — DONE 2026-07-09, commit `a8f31d2`: curate now unions curated-story tickers with `prefs.tracked_tickers`; `n_tickers` went 1 → 11 (the full watchlist).
+- [x] 🤖 Ensure `generate` weaves the real `ticker_data` price/change/52w/PE + NL market read into the story prose. — landed in S3 (commit `c464a43`), re-verified in the E2 local run 2026-07-09: regenerated brief wove real BTC/ETH prices alongside SPY/QQQ/NVDA/AAPL, substring anti-fabrication gate passing with no retry.
 
 **Gate (live DB + founder read):**
 ```sql
@@ -158,6 +158,6 @@ Landing-page honesty rework (sells 6 unbuilt features — lesson #100), Stripe/b
 
 ## Doc updates this plan implies (🤖, low-cost, do alongside E0/E1)
 
-- Update `.claude/CLAUDE.md` Stack line (host → Vercel; Gemini retired; Anthropic core loop) — flagged 3× in prior reviews, never applied.
-- Add a `DECISIONS.md` host entry (Vercel supersedes Railway).
-- Mark `errors-fixed.json` ERR-028 as fixed-in-code; keep ERR-029 open until E1's gate passes live.
+- Update `.claude/CLAUDE.md` Stack line (host → Vercel; Gemini retired; Anthropic core loop) — flagged 3× in prior reviews, never applied. — **DONE 2026-07-09 (doc-sweep commit).**
+- Add a `DECISIONS.md` host entry (Vercel supersedes Railway). — **already DONE in `41e52db` (DECISIONS 2026-07-03 entry).**
+- Mark `errors-fixed.json` ERR-028 as fixed-in-code; keep ERR-029 open until E1's gate passes live. — **DONE 2026-07-09 (doc-sweep commit): ERR-028 → fixed-in-code (654113d); ERR-029 annotated with the 2026-07-09 local proof, stays open until E6.**

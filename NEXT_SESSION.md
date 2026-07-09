@@ -1,6 +1,17 @@
 # ForgeMinds — Session Handoff / Pickup Doc
 
-> **Last updated:** 2026-07-03 by PS Claude (executor, write-lock held) — live dev-DB re-verification.
+> **Last updated:** 2026-07-09 (doc-sweep session) — E1/E2 landed + proven locally. **THIS BLOCK SUPERSEDES the 2026-07-03 status below — read that one as history.**
+>
+> **Where we are (2026-07-09):** the active path is `docs/architecture/v1-execution-plan-2026-07-08.md` (E-slices; supersedes the S-slices).
+> - **E1 DONE + proven locally** (commit `1123f8b`): curation reads the interest graph, hard per-user `min_relevance_score` floor, finance-scoped sources, and the root-cause **JSON-fence-strip parse fix** in `scorer.ts` (every score batch had been silently failing on ```json fences — no article had ever gotten a real personalized relevance score locally). Local run: fully finance-first brief, zero generic-news leak, real Claude calls.
+> - **E2 DONE + proven locally** (commit `a8f31d2`): ticker extraction broadened to company names (confidence-gated, strict resolution preserved); `briefs.ticker_symbols` unions the watchlist — `n_tickers` 1→11, 16 articles with tickers in 24h, brief weaves real BTC/ETH + SPY/QQQ prices, anti-fabrication gate passing.
+> - **H1 architecture doc committed** (`eb0d09f` → `docs/architecture/curation-hardening-vra.md`) — **PENDING founder "build approved"** on §7 assumptions; no H1 code until then.
+> - **I1 (insight layer) architect-probe** is running in a parallel session → `docs/architecture/insight-layer.md` will land; founder approval will be needed. Do not create/edit that file from other sessions.
+> - **Founder gates NOT yet passed:** founder has not formally judged the E1/E2 brief vs Pipedream; H1 not approved; **E6 host cutover not done** — the stale Cloudflare dispatcher still runs the pre-fix bundle and writes legacy `diversity_category='core'` rows into dev every ~30 min (known, parked until E6). ERR-028 is fixed-in-code (654113d); ERR-029 stays OPEN until the E6 live-cron proof.
+> - **Git:** `master` pushed through `ee886a3`; the 2 newest commits (`a8f31d2`, `eb0d09f`) + this doc-sweep commit await founder-OK push (E0 discipline).
+> **Next actions:** 🧑 (1) judge the E1/E2 brief vs Pipedream, (2) approve/reject H1 §7, (3) later I1. 🤖 after approvals: E3 (WF2 outputs) per the plan; H1 build; Tier A causal-why possibly before the E6 dogfood. All work on dev `ymgbjtgczgnooscigplb`; never read `.env*`.
+>
+> **Last updated (prior):** 2026-07-03 by PS Claude (executor, write-lock held) — live dev-DB re-verification.
 >
 > **⚠ LIVE STATUS — verified 2026-07-03 against the live dev DB (`ymgbjtgczgnooscigplb`). THIS SUPERSEDES the 2026-07-01 one-line status below — read that one as history.**
 > **The AI pipeline is NOT firing. ERR-029 is STILL LIVE (not resolved).** Over the last 72h every step (ingest→score→curate→enrich→generate→deliver) ran ~102× and reports `completed`, but **`ai_calls_made=0` / `ai_tokens=0` on EVERY step, every run** — zero AI calls. Every brief since **2026-06-27** is `generation_model=heuristic` with **`summary_html=NULL`** (empty briefs); the last real AI brief was **2026-06-14** → the dashboard is effectively blank. The **fail-loud guard has fired 0× in 30 days**, which proves the committed fix bundle (fail-loud + Anthropic-only core loop; commits `654113d`, `b8ff95d`, `c1376b6`) is **NOT DEPLOYED — the old silent code is what's live**. `private.app_config.forgeminds_base_url` still points at **Cloudflare Workers** (ERR-026) — the host cutover never happened. A downstream anti-fabrication gate on `generate` (substring-validation of AI numbers/tickers) is committed (`d46cac0`) but is **unverifiable in prod until the AI fires**.
