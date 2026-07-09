@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { curateStories } from "@/lib/pipeline/curator";
+import { curateStories, resolveExcludedCategories } from "@/lib/pipeline/curator";
 import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
 
 export const maxDuration = 60;
@@ -105,6 +105,12 @@ export async function GET(request: Request) {
       });
     }
 
+    // Resolve the reader's excluded_topics ("sports scores", "lifestyle
+    // fluff", ...) to canonical category slugs the curator can hard-exclude
+    // (E1 fix 1). A miss just isn't excluded at the category level — the
+    // minRelevanceScore floor below is the primary, always-on defense.
+    const excludedCategories = resolveExcludedCategories(prefs.excluded_topics);
+
     // Re-hydrate the scorer's 1-10 internal shape for the curator (which expects
     // that range). The schema stores 0-1; multiply by 10 here.
     // Curator config (target count, max-per-category, min score) comes from
@@ -128,8 +134,11 @@ export async function GET(request: Request) {
         targetCount: prefs.max_articles_per_brief,
         maxPerCategory: prefs.max_per_category,
         maxPerEntity: prefs.max_per_entity,
-        // min_composite_score is 0-1 in schema/prefs; curator expects 1-10 scale
+        // min_composite_score / min_relevance_score are 0-1 in schema/prefs;
+        // curator expects the scorer's native 1-10 scale.
         minCompositeScore: prefs.min_composite_score * 10,
+        minRelevanceScore: prefs.min_relevance_score * 10,
+        excludedCategories,
       }
     );
 

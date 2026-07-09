@@ -28,6 +28,10 @@ export interface PipelinePrefs {
   recency_window_minutes: number;
   score_lookback_minutes: number;
   min_composite_score: number; // 0-1 scale (matches schema)
+  // Hard relevance floor at curation, independent of min_composite_score
+  // (E1 fix 2 — see curator.ts CurationConfig.minRelevanceScore). 0-1 scale,
+  // same convention as min_composite_score.
+  min_relevance_score: number;
   max_articles_per_brief: number;
   max_per_category: number;
   max_per_entity: number;
@@ -75,6 +79,7 @@ export const DEFAULT_PREFS: Omit<PipelinePrefs, "user_id"> = {
   recency_window_minutes: 120,
   score_lookback_minutes: 240,
   min_composite_score: 0.45,
+  min_relevance_score: 0.5,
   max_articles_per_brief: 15,
   max_per_category: 3,
   max_per_entity: 2,
@@ -123,7 +128,7 @@ export async function loadPrefs(
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, max_articles_per_brief, max_per_category, max_per_entity, topics, tracked_tickers, excluded_topics, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size, style_anchors, style_tone, style_density, style_captured_at"
+      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, min_relevance_score, max_articles_per_brief, max_per_category, max_per_entity, topics, tracked_tickers, excluded_topics, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size, style_anchors, style_tone, style_density, style_captured_at"
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -142,6 +147,7 @@ export async function loadPrefs(
     recency_window_minutes: data?.recency_window_minutes ?? DEFAULT_PREFS.recency_window_minutes,
     score_lookback_minutes: data?.score_lookback_minutes ?? DEFAULT_PREFS.score_lookback_minutes,
     min_composite_score: Number(data?.min_composite_score ?? DEFAULT_PREFS.min_composite_score),
+    min_relevance_score: Number(data?.min_relevance_score ?? DEFAULT_PREFS.min_relevance_score),
     max_articles_per_brief: data?.max_articles_per_brief ?? DEFAULT_PREFS.max_articles_per_brief,
     max_per_category: data?.max_per_category ?? DEFAULT_PREFS.max_per_category,
     max_per_entity: data?.max_per_entity ?? DEFAULT_PREFS.max_per_entity,

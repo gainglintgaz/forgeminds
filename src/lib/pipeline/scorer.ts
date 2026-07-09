@@ -66,7 +66,9 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // The 13 canonical category slugs (single source of truth = source_catalog +
 // the categories table). The model MUST choose exactly one of these. Layer-1
 // universal taxonomy — NOT finance-specific (per ARCHITECTURE §1 layer boundary).
-const CANONICAL_CATEGORIES = [
+// Exported so curator.ts can resolve a user's excluded_topics against the same
+// taxonomy (E1 fix 1) without duplicating the list.
+export const CANONICAL_CATEGORIES = [
   "finance",
   "tech",
   "sciences",
@@ -170,7 +172,18 @@ ${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.descri
       aiTokensUsed += (response.inputTokens || 0) + (response.outputTokens || 0);
       aiCostUsd += response.costEstimateUsd || 0;
 
-      const parsed = JSON.parse(response.content);
+      // Anthropic has no strict JSON-mode toggle (see claude.ts) — the model
+      // is instructed to skip code fences but doesn't always comply. Strip a
+      // ```json ... ``` wrapper before parsing rather than failing the whole
+      // batch on a formatting quirk (discovered live during E1 local
+      // verification: every batch was silently failing this way, so no
+      // article had ever gotten a real per-user relevance score locally).
+      const jsonText = response.content
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/```\s*$/i, "")
+        .trim();
+      const parsed = JSON.parse(jsonText);
       const items = Array.isArray(parsed?.items) ? parsed.items : [];
 
       // Parse-time id validation (ERR-028 layer 1): the model may only echo an
