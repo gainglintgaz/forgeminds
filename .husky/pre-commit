@@ -78,4 +78,20 @@ if [ -n "$STAGED_TS" ]; then
   fi
 fi
 
+# ──────────────────────────────────────────────────────────────────────
+# 5. raw_articles immutability (H1 fix 3, docs/architecture/curation-
+#    hardening-vra.md §9 acceptance criterion / Auditor persona finding).
+#    raw_articles content columns (title/url/summary/content_hash) must
+#    never be updated after insert — pipeline_status is the ONLY column
+#    any code path may .update(). Project-wide invariant, not diff-scoped,
+#    so it can't silently erode the next time someone adds a "fix a typo
+#    in the title" feature. Permanent, runs every commit.
+# ──────────────────────────────────────────────────────────────────────
+echo "▶ raw_articles immutability check"
+if grep -rn '\.from("raw_articles")\s*\.update(' src/ | grep -v pipeline_status | grep -q .; then
+  red "✗ Found a raw_articles .update() call not scoped to pipeline_status only."
+  yellow "  raw_articles content columns must never be updated after insert."
+  exit 1
+fi
+
 green "✓ pre-commit gates passed"
