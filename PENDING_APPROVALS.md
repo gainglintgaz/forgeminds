@@ -107,3 +107,30 @@ Phase E1 (live test mode) ships with a **DEV-ONLY scaffold** that MUST be remove
 - **File:** .claude/signal-log.jsonl
 - **Priority:** CRITICAL -- Victor action required
 
+
+
+---
+
+## Signal-Auto Proposals (2026-06-27, project: forgeminds)
+
+### [SIGNAL-AUTO] REPEAT signal fired 1x -- rule promotion candidate (2026-06-27)
+- **Project:** forgeminds
+- **Signal count:** 1 REPEAT events this session
+- **Action:** Review signal-log.jsonl for what was repeated. If a prior lesson exists for this pattern, promote it to a factory rule in .claude/rules/.
+- **File:** .claude/signal-log.jsonl (search session_id from this session)
+- **Priority:** HIGH
+
+
+
+---
+
+## Signal-Auto Proposals (2026-07-02, project: forgeminds)
+
+
+### [SIGNAL-AUTO] SECURITY keyword tag fired 1x -- no secret detected (2026-07-02)
+- **Project:** forgeminds
+- **Signal count:** 1 SECURITY events; 0 with secret_in_prompt:true (no leak detected)
+- **Action:** Likely a false positive -- the SECURITY keyword classifier matched trigger words (e.g. "approve", gate language), not an actual secret. Review only; no rotation needed.
+- **File:** .claude/signal-log.jsonl
+- **Priority:** LOW
+
