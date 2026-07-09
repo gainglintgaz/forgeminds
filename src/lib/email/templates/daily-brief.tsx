@@ -23,6 +23,12 @@ import {
   Text,
 } from "@react-email/components";
 
+interface DegradedSourcesSnapshot {
+  count_active: number;
+  count_degraded: number;
+  source_names_degraded: string[];
+}
+
 interface DailyBriefEmailProps {
   recipientName: string;
   briefTitle: string;
@@ -32,6 +38,15 @@ interface DailyBriefEmailProps {
   tickerSymbols: string[];
   categoriesCovered: string[];
   briefUrl: string;
+  /**
+   * Generate-time snapshot of pipeline source health (H1 fix 2). Null for
+   * briefs generated before this migration landed — no banner in that case.
+   * count_degraded === 0 means healthy — also no banner. Deliberately muted/
+   * factual styling near the footer, matching the End User persona finding
+   * (architecture §5): this is a pipeline notice, never a market signal, and
+   * must never be styled as a security/spam-style alert above the fold.
+   */
+  degradedSources?: DegradedSourcesSnapshot | null;
 }
 
 export function DailyBriefEmail({
@@ -43,6 +58,7 @@ export function DailyBriefEmail({
   tickerSymbols,
   categoriesCovered,
   briefUrl,
+  degradedSources,
 }: DailyBriefEmailProps) {
   const previewText = `${articleCount} stories curated from your sources for ${briefDate}`;
 
@@ -88,6 +104,19 @@ export function DailyBriefEmail({
               View full brief in ForgeMinds →
             </Link>
           </Section>
+
+          {degradedSources && degradedSources.count_degraded > 0 ? (
+            <>
+              <Hr style={hr} />
+              <Section>
+                <Text style={notice}>
+                  Pipeline notice: {degradedSources.count_degraded} of {degradedSources.count_active}{" "}
+                  of your sources aren&apos;t responding ({degradedSources.source_names_degraded.join(", ")}) —
+                  unrelated to market conditions. Check Sources in ForgeMinds for details.
+                </Text>
+              </Section>
+            </>
+          ) : null}
 
           <Hr style={hr} />
 
@@ -158,6 +187,15 @@ const cta = {
 
 const footer = {
   color: "#737373",
+  fontSize: "12px",
+  lineHeight: 1.5,
+  margin: "0 0 8px 0",
+};
+
+// Muted/factual — matches the dark, low-contrast palette above, deliberately
+// NOT alert-red or above-the-fold (H1 fix 2, End User persona finding).
+const notice = {
+  color: "#a3a3a3",
   fontSize: "12px",
   lineHeight: 1.5,
   margin: "0 0 8px 0",

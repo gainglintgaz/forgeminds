@@ -1,4 +1,5 @@
 import type { RawArticle, FetchResult } from "@/lib/types/articles";
+import { scrubUrl } from "./url-scrub";
 
 export async function fetchAlphaVantageNews(): Promise<FetchResult> {
   const apiKey = process.env.ALPHA_VANTAGE_KEY;
@@ -45,6 +46,7 @@ export async function fetchAlphaVantageNews(): Promise<FetchResult> {
 
     return { source: "AlphaVantage", success: true, items };
   } catch (error) {
-    return { source: "AlphaVantage", success: false, items: [], error: (error as Error).message };
+    // scrubUrl: forward-looking prevention (H1 fix 6) — see finnhub.ts note.
+    return { source: "AlphaVantage", success: false, items: [], error: scrubUrl((error as Error).message) };
   }
 }

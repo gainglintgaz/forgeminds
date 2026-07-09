@@ -9,6 +9,8 @@
  * Money is normalized to USD here; the route converts to BIGINT cents (Rule 14).
  */
 
+import { scrubUrl } from "./ingest/url-scrub";
+
 const timeout = (ms: number) => AbortSignal.timeout(ms);
 
 export interface StockQuote {
@@ -33,7 +35,7 @@ export async function fetchStockData(symbol: string, apiKey: string): Promise<St
   try {
     const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${enc}&token=${apiKey}`, { signal: timeout(10000) });
     if (r.ok) quote = (await r.json()) as FinnhubQuoteResp;
-  } catch (e) { console.error(`[market-data] finnhub quote ${symbol}:`, (e as Error).message); }
+  } catch (e) { console.error(`[market-data] finnhub quote ${symbol}:`, scrubUrl((e as Error).message)); }
   if (!quote || !quote.c || quote.c === 0) return null; // unknown symbol
 
   let name: string | null = null;
@@ -46,7 +48,7 @@ export async function fetchStockData(symbol: string, apiKey: string): Promise<St
       // marketCapitalization is in millions USD.
       marketCapUsd = typeof p?.marketCapitalization === "number" ? p.marketCapitalization * 1_000_000 : null;
     }
-  } catch (e) { console.error(`[market-data] finnhub profile2 ${symbol}:`, (e as Error).message); }
+  } catch (e) { console.error(`[market-data] finnhub profile2 ${symbol}:`, scrubUrl((e as Error).message)); }
 
   let high52wUsd: number | null = null, low52wUsd: number | null = null, peRatio: number | null = null, volume: number | null = null;
   try {
@@ -60,7 +62,7 @@ export async function fetchStockData(symbol: string, apiKey: string): Promise<St
       const avgVolM = num(m["10DayAverageTradingVolume"]);
       volume = avgVolM != null ? Math.round(avgVolM * 1_000_000) : null;
     }
-  } catch (e) { console.error(`[market-data] finnhub metric ${symbol}:`, (e as Error).message); }
+  } catch (e) { console.error(`[market-data] finnhub metric ${symbol}:`, scrubUrl((e as Error).message)); }
 
   return {
     name,

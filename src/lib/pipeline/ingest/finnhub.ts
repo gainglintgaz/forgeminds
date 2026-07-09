@@ -1,4 +1,5 @@
 import type { RawArticle, FetchResult } from "@/lib/types/articles";
+import { scrubUrl } from "./url-scrub";
 
 export async function fetchFinnhubNews(): Promise<FetchResult> {
   const apiKey = process.env.FINNHUB_API_KEY;
@@ -29,6 +30,10 @@ export async function fetchFinnhubNews(): Promise<FetchResult> {
 
     return { source: "Finnhub", success: true, items };
   } catch (error) {
-    return { source: "Finnhub", success: false, items: [], error: (error as Error).message };
+    // scrubUrl: forward-looking prevention — some runtimes' network-error
+    // messages embed the full request URL (which carries `token=`); this
+    // fetcher's error string may be persisted to sources.last_error /
+    // pipeline_runs.metadata (H1 fix 6).
+    return { source: "Finnhub", success: false, items: [], error: scrubUrl((error as Error).message) };
   }
 }

@@ -70,15 +70,22 @@ export async function GET(request: Request) {
     // every tick — burning shared API quota for users who never asked.
     const { data: sources } = await supabase
       .from("sources")
-      .select("type, url, config")
+      .select("id, type, url, config")
       .eq("user_id", userId)
       .eq("is_active", true);
 
-    const byType = new Map<string, Array<{ url: string | null; config: unknown }>>();
+    const byType = new Map<string, Array<{ id: string; url: string | null; config: unknown }>>();
+    // RSS is fetched per-URL, so we need url -> source_id to attribute a
+    // per-feed failure to the right row (H1 fix 2 §7 assumption 2). The other
+    // 4 fetcher types are called once per TYPE (one shared API key covers
+    // every active source row of that type), so their result applies to every
+    // source_id in that type's bucket.
+    const urlToSourceId = new Map<string, string>();
     for (const s of sources ?? []) {
       const arr = byType.get(s.type) ?? [];
-      arr.push({ url: s.url, config: s.config });
+      arr.push({ id: s.id, url: s.url, config: s.config });
       byType.set(s.type, arr);
+      if (s.url) urlToSourceId.set(s.url, s.id);
     }
 
     // RSS fetcher takes a URL list. Other fetchers currently take no args
@@ -91,7 +98,13 @@ export async function GET(request: Request) {
       .map((s) => s.url)
       .filter((u): u is string => !!u);
 
-    type RssResultShape = { articles: RawArticle[]; successCount: number; errorCount: number; errors: string[] };
+    type RssResultShape = {
+      articles: RawArticle[];
+      successCount: number;
+      errorCount: number;
+      errors: string[];
+      results: Array<{ url: string; success: boolean; error?: string }>;
+    };
     const fetcherTasks: Array<Promise<{ source: string; result: FetchResult | RssResultShape }>> = [];
 
     if (rssUrls.length > 0) {
@@ -189,22 +202,40 @@ export async function GET(request: Request) {
       }
     }
 
-    // Mark the fetched source types as fetched now (review C-4 / ERR-025). Without
-    // this, sources.last_fetched_at stays NULL forever and any "source health"
-    // display lies + staleness is undetectable. Single .in() update (no N+1, VIBE 53);
-    // scoped by type because the fetchers run per-type, not per-source-row.
-    const invokedTypes = results.map((r) => r.source);
-    if (invokedTypes.length > 0) {
-      const { error: srcErr } = await supabase
-        .from("sources")
-        .update({ last_fetched_at: new Date().toISOString() })
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .in("type", invokedTypes);
+    // Record per-source fetch outcomes (H1 fix 2 — replaces the old
+    // last_fetched_at-only bulk update, review C-4 / ERR-025's original fix).
+    // RSS is per-URL (urlToSourceId); the other 4 fetcher types report once
+    // per type, applied to every active source_id in that type's bucket (one
+    // shared API key covers all rows of that type). Errors are already
+    // scrubbed of API keys by each fetcher (H1 fix 6) before they reach here.
+    // Single batched RPC — one round trip regardless of source count, no N+1
+    // (Senior Architect §5 / Hostile Architect finding #9).
+    const sourceFetchResults: Array<{ source_id: string; success: boolean; error: string | null }> = [];
+    for (const { source, result } of results) {
+      if ("results" in result) {
+        // RSS shape — per-URL.
+        for (const r of (result as RssResultShape).results) {
+          const sourceId = urlToSourceId.get(r.url);
+          if (!sourceId) continue; // shouldn't happen — url came from this user's own sources
+          sourceFetchResults.push({ source_id: sourceId, success: r.success, error: r.error ?? null });
+        }
+      } else {
+        // FetchResult shape — one outcome applied to every source row of this type.
+        const fr = result as FetchResult;
+        for (const s of byType.get(source) ?? []) {
+          sourceFetchResults.push({ source_id: s.id, success: fr.success, error: fr.error ?? null });
+        }
+      }
+    }
+    if (sourceFetchResults.length > 0) {
+      const { error: srcErr } = await supabase.rpc("record_source_fetch_results", {
+        p_user_id: userId,
+        p_results: sourceFetchResults,
+      });
       if (srcErr) {
-        // Non-fatal: the articles already landed; a stale health timestamp must
+        // Non-fatal: the articles already landed; a stale health record must
         // not fail the ingest run. Log with context (VIBE 52), don't swallow.
-        console.error(`[Ingest] sources.last_fetched_at update failed: ${srcErr.message}`);
+        console.error(`[Ingest] record_source_fetch_results failed: ${srcErr.message}`);
       }
     }
 

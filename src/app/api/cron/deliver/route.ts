@@ -8,6 +8,12 @@ import type { ReactElement } from "react";
 
 export const maxDuration = 60;
 
+interface DegradedSourcesSnapshot {
+  count_active: number;
+  count_degraded: number;
+  source_names_degraded: string[];
+}
+
 interface BriefForDelivery {
   id: string;
   user_id: string;
@@ -19,6 +25,7 @@ interface BriefForDelivery {
   ticker_symbols: string[] | null;
   article_count: number | null;
   categories_covered: string[] | null;
+  degraded_sources: DegradedSourcesSnapshot | null;
 }
 
 interface RecipientProfile {
@@ -145,7 +152,7 @@ export async function GET(request: Request) {
     const { data: briefs, error: briefErr } = await supabase
       .from("briefs")
       .select(
-        "id, user_id, title, brief_date, summary_html, summary_text, article_ids, ticker_symbols, article_count, categories_covered"
+        "id, user_id, title, brief_date, summary_html, summary_text, article_ids, ticker_symbols, article_count, categories_covered, degraded_sources"
       )
       .eq("user_id", userId)
       .not("summary_html", "is", null)
@@ -195,6 +202,7 @@ export async function GET(request: Request) {
           articleCount: brief.article_count ?? 0,
           tickerSymbols: brief.ticker_symbols ?? [],
           categoriesCovered: brief.categories_covered ?? [],
+          degradedSources: brief.degraded_sources,
           // E1: host hardcoded to the live Worker URL — no NEXT_PUBLIC_APP_URL dependency
           // (skips the .env.local gate; can't ship a dead localhost link). Per founder + desktop
           // session. E2 swaps this to the real domain (design doc §3.E2).

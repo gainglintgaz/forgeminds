@@ -112,11 +112,22 @@ export async function fetchRSSFeed(feedUrl: string): Promise<FetchResult> {
   }
 }
 
+/** Per-URL fetch outcome — lets the caller attribute a failure to the exact
+ *  `sources` row it came from (H1 fix 2, architecture §7 assumption 2). This
+ *  is the one non-additive signature change in the H1 slice, contained to
+ *  this file + its single call site in ingest/route.ts. */
+export interface RssUrlResult {
+  url: string;
+  success: boolean;
+  error?: string;
+}
+
 export async function fetchAllRSSFeeds(feedUrls: string[]): Promise<{
   articles: RawArticle[];
   successCount: number;
   errorCount: number;
   errors: string[];
+  results: RssUrlResult[];
 }> {
   const results = await Promise.allSettled(
     feedUrls.map((url) => fetchRSSFeed(url))
@@ -126,8 +137,10 @@ export async function fetchAllRSSFeeds(feedUrls: string[]): Promise<{
   let successCount = 0;
   let errorCount = 0;
   const errors: string[] = [];
+  const perUrlResults: RssUrlResult[] = [];
 
-  for (const result of results) {
+  results.forEach((result, i) => {
+    const url = feedUrls[i];
     const val = result.status === "fulfilled"
       ? result.value
       : { success: false, source: "unknown", items: [], error: (result.reason as Error)?.message };
@@ -135,11 +148,13 @@ export async function fetchAllRSSFeeds(feedUrls: string[]): Promise<{
     if (val.success) {
       articles.push(...val.items);
       successCount++;
+      perUrlResults.push({ url, success: true });
     } else {
       errorCount++;
       errors.push(`${val.source}: ${val.error}`);
+      perUrlResults.push({ url, success: false, error: val.error });
     }
-  }
+  });
 
-  return { articles, successCount, errorCount, errors };
+  return { articles, successCount, errorCount, errors, results: perUrlResults };
 }

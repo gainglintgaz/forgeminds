@@ -18,6 +18,17 @@ export const maxDuration = 120;
 // per migration 20260518000000. Prior v0.1 was style-agnostic.
 const GENERATE_PROMPT_VERSION = "generate-v0.2";
 
+// H1 fix 2 (architecture §7 assumption 3): a source needs 3+ CONSECUTIVE
+// failures before it's banner-worthy — 1-2 is treated as a transient blip,
+// avoiding single-blip false positives. Resets to 0 on any success.
+const DEGRADED_THRESHOLD = 3;
+
+interface DegradedSourcesSnapshot {
+  count_active: number;
+  count_degraded: number;
+  source_names_degraded: string[];
+}
+
 interface StylePrefs {
   anchors: StyleAnchor[];
   tone: StyleTone | null;
@@ -246,6 +257,27 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "No briefs pending generation", generated: 0 });
     }
 
+    // Degradation snapshot (H1 fix 2, architecture §7 assumption 4): computed
+    // ONCE per run, BEFORE synthesis, and written verbatim into every brief
+    // this tick generates. This is a SNAPSHOT, not a live query — a brief's
+    // banner reflects what was true when it was generated, so re-opening the
+    // same brief later (after sources recover or degrade further) shows the
+    // same state it had at generation time. Always populated (count_degraded:
+    // 0 = healthy), never a bare null after H1.
+    const { data: activeSources } = await supabase
+      .from("sources")
+      .select("name, consecutive_failures")
+      .eq("user_id", userId)
+      .eq("is_active", true);
+    const degradedSources = (activeSources ?? []).filter(
+      (s) => (s.consecutive_failures ?? 0) >= DEGRADED_THRESHOLD
+    );
+    const degradedSnapshot: DegradedSourcesSnapshot = {
+      count_active: (activeSources ?? []).length,
+      count_degraded: degradedSources.length,
+      source_names_degraded: degradedSources.map((s) => s.name),
+    };
+
     let generatedCount = 0;
     let failedCount = 0;
     let lastModel: string | undefined;
@@ -452,6 +484,7 @@ export async function GET(request: Request) {
           summary_text: synthesis.summary_text,
           generation_model: aiModel ?? "unknown",
           prompt_version: PROMPT_VERSION + "/" + GENERATE_PROMPT_VERSION,
+          degraded_sources: degradedSnapshot,
         })
         .eq("id", brief.id);
 

@@ -1,4 +1,5 @@
 import type { RawArticle, FetchResult } from "@/lib/types/articles";
+import { scrubUrl } from "./url-scrub";
 
 export async function fetchBenzingaNews(windowMinutes: number = 120): Promise<FetchResult> {
   const apiKey = process.env.BENZINGA_API_KEY;
@@ -32,6 +33,7 @@ export async function fetchBenzingaNews(windowMinutes: number = 120): Promise<Fe
 
     return { source: "Benzinga", success: true, items };
   } catch (error) {
-    return { source: "Benzinga", success: false, items: [], error: (error as Error).message };
+    // scrubUrl: forward-looking prevention (H1 fix 6) — see finnhub.ts note.
+    return { source: "Benzinga", success: false, items: [], error: scrubUrl((error as Error).message) };
   }
 }

@@ -10,6 +10,12 @@ import { ArticleCardBody } from "@/components/briefs/article-card-body";
 // the page should reflect them on refresh. revalidate disabled.
 export const dynamic = "force-dynamic";
 
+interface DegradedSourcesSnapshot {
+  count_active: number;
+  count_degraded: number;
+  source_names_degraded: string[];
+}
+
 interface BriefDetail {
   id: string;
   title: string;
@@ -25,6 +31,7 @@ interface BriefDetail {
   delivered_at: string | null;
   generation_model: string | null;
   prompt_version: string | null;
+  degraded_sources: DegradedSourcesSnapshot | null;
 }
 
 interface ArticleRow {
@@ -54,7 +61,7 @@ export default async function BriefDetailPage({
   const { data: briefRaw } = await supabase
     .from("briefs")
     .select(
-      "id, title, brief_date, brief_type, summary_html, summary_text, article_ids, ticker_symbols, categories_covered, article_count, is_delivered, delivered_at, generation_model, prompt_version"
+      "id, title, brief_date, brief_type, summary_html, summary_text, article_ids, ticker_symbols, categories_covered, article_count, is_delivered, delivered_at, generation_model, prompt_version, degraded_sources"
     )
     .eq("id", id)
     .single();
@@ -292,6 +299,25 @@ export default async function BriefDetailPage({
           </div>
         )}
       </section>
+
+      {brief.degraded_sources && brief.degraded_sources.count_degraded > 0 ? (
+        // Muted, factual pipeline notice — deliberately NOT styled as a market
+        // signal (H1 fix 2, Domain Expert persona finding: a degraded-feeds day
+        // during a volatile market week must never read as an implicit trading
+        // signal). Links to /sources, which independently derives its own live
+        // "concerning" list from the same underlying columns (architecture §4
+        // reverse provenance) — this banner is a snapshot of what was true at
+        // generation time, /sources is what's true right now.
+        <p className="text-xs text-zinc-400 mt-8 pt-4 border-t">
+          Pipeline notice: {brief.degraded_sources.count_degraded} of{" "}
+          {brief.degraded_sources.count_active} of your sources aren&apos;t
+          responding ({brief.degraded_sources.source_names_degraded.join(", ")}) —
+          unrelated to market conditions.{" "}
+          <Link href="/sources" className="underline underline-offset-4">
+            Check source health →
+          </Link>
+        </p>
+      ) : null}
 
       {brief.generation_model || brief.prompt_version ? (
         <p className="text-xs text-zinc-400 mt-8 pt-4 border-t">
