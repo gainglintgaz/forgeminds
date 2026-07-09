@@ -148,7 +148,7 @@ CATEGORY: classify into EXACTLY ONE of these canonical slugs (output the slug ve
 ${CANONICAL_CATEGORIES.join(", ")}
 If none fit, output "uncategorized". Never invent a category.
 
-TICKERS: list the stock/crypto ticker SYMBOLS the article is directly about (uppercase, e.g. ["AAPL","NVDA","BTC"]); [] if none. Only real, well-formed symbols — never invent one.
+TICKERS: list the stock/crypto ticker SYMBOLS the article is directly about (uppercase, e.g. ["AAPL","NVDA","BTC"]); [] if none. Resolve from the COMPANY NAME too, not only an explicit symbol already in the text — e.g. "Amazon"→AMZN, "Tesla"→TSLA, "Nvidia"→NVDA, "Microsoft"→MSFT, "Apple"→AAPL, "Alphabet"/"Google"→GOOGL, "Meta"/"Facebook"→META, "Bitcoin"→BTC, "Ethereum"→ETH. Only include a symbol you are CONFIDENT is correct for that exact company — if you're not sure of the exact ticker, omit it. Only real, well-formed symbols — never invent one.
 
 Tones: neutral, bullish, bearish, mixed.
 

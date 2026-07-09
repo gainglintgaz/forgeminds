@@ -149,13 +149,20 @@ export async function GET(request: Request) {
     const articleIds = curated.map((c) => c.articleId);
     const categoriesCovered = Array.from(new Set(curated.map((c) => c.category)));
 
-    // Aggregate the curated stories' resolved tickers → brief ticker_symbols (S3).
-    // This is what feeds the enrich step (market data) + generate (the market read).
+    // Aggregate the curated stories' resolved tickers ∪ the user's tracked_tickers
+    // watchlist → brief ticker_symbols (E2 fix 2). Union with the watchlist so a
+    // finance brief always carries the reader's positions even when a given
+    // day's top-N curated stories don't happen to mention all of them by name —
+    // this is what feeds the enrich step (market data) + generate (the market
+    // read woven into story prose).
     const tickersByArticle = new Map(
       freshScored.map((s) => [s.article_id, ((s.tickers ?? []) as string[])])
     );
     const tickerSymbols = Array.from(
-      new Set(articleIds.flatMap((id) => tickersByArticle.get(id) ?? []))
+      new Set([
+        ...articleIds.flatMap((id) => tickersByArticle.get(id) ?? []),
+        ...(prefs.tracked_tickers ?? []),
+      ])
     );
 
     // ── LOAD-BEARING SEAM (ERR-019 fix) ──────────────────────────────────
