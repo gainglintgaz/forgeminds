@@ -1,5 +1,6 @@
 import { routeAIRequest } from "@/lib/ai/router";
 import type { AIResponse } from "@/lib/types/ai";
+import { wrapUntrustedArticleData, UNTRUSTED_ARTICLE_DATA_DIRECTIVE } from "./prompt-safety";
 
 interface ArticleToScore {
   id: string;
@@ -154,8 +155,12 @@ Tones: neutral, bullish, bearish, mixed.
 
 Return JSON: {"items":[{"id":"...","category":"<slug>","tickers":["..."],"relevance_score":N,"impact_score":N,"depth_score":N,"viral_score":N,"tone":"...","reason":"1 sentence"}]}
 
+${UNTRUSTED_ARTICLE_DATA_DIRECTIVE}
+
 Articles:
-${JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.description?.slice(0, 400) })))}`;
+${wrapUntrustedArticleData(
+  JSON.stringify(batch.map((a) => ({ id: a.id, title: a.title, summary: a.description?.slice(0, 400) })))
+)}`;
 
     try {
       const response = await routeAIRequest({
