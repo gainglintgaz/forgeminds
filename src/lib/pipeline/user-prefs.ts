@@ -51,6 +51,11 @@ export interface PipelinePrefs {
   style_tone: StyleTone | null;
   style_density: StyleDensity | null;
   style_captured_at: string | null;
+  // Daily AI budget cap (H1 fix 4, migration 20260709000001). score + generate
+  // share ONE pool. Real per-user column with a sane default — never a
+  // hardcoded literal (VIBE Rule 55) — even before a Settings UI exists to
+  // edit it.
+  daily_ai_budget_usd_cents: number;
 }
 
 export type StyleTone =
@@ -94,6 +99,7 @@ export const DEFAULT_PREFS: Omit<PipelinePrefs, "user_id"> = {
   style_tone: null,
   style_density: null,
   style_captured_at: null,
+  daily_ai_budget_usd_cents: 50,
 };
 
 export const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -128,7 +134,7 @@ export async function loadPrefs(
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, min_relevance_score, max_articles_per_brief, max_per_category, max_per_entity, topics, tracked_tickers, excluded_topics, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size, style_anchors, style_tone, style_density, style_captured_at"
+      "timezone, cadence_minutes, active_hours_start, active_hours_end, active_days, recency_window_minutes, score_lookback_minutes, min_composite_score, min_relevance_score, max_articles_per_brief, max_per_category, max_per_entity, topics, tracked_tickers, excluded_topics, score_batch_size, deliver_batch_size, briefs_page_size, dashboard_feed_size, style_anchors, style_tone, style_density, style_captured_at, daily_ai_budget_usd_cents"
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -162,5 +168,7 @@ export async function loadPrefs(
     style_tone: (data?.style_tone as StyleTone | null) ?? DEFAULT_PREFS.style_tone,
     style_density: (data?.style_density as StyleDensity | null) ?? DEFAULT_PREFS.style_density,
     style_captured_at: data?.style_captured_at ?? DEFAULT_PREFS.style_captured_at,
+    daily_ai_budget_usd_cents:
+      data?.daily_ai_budget_usd_cents ?? DEFAULT_PREFS.daily_ai_budget_usd_cents,
   };
 }

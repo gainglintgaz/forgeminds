@@ -5,6 +5,7 @@ import { loadCategoryResolver } from "@/lib/pipeline/category-resolver";
 import { getResolver } from "@/lib/entities/resolver";
 import { PROMPT_VERSION } from "@/lib/ai/router";
 import { resolveUserId, loadPrefs, SYSTEM_USER_ID } from "@/lib/pipeline/user-prefs";
+import { checkDailyAiBudget, recordAiSpend } from "@/lib/pipeline/ai-budget";
 
 export const maxDuration = 120;
 
@@ -60,6 +61,40 @@ export async function GET(request: Request) {
   }
 
   try {
+    // ═══ DAILY AI BUDGET ENTRY GATE (H1 fix 4) ═══════════════════════════
+    // MUST run BEFORE the article fetch below — a budget-capped run must
+    // NEVER reach the code that populates aiAttempts, or it would trip the
+    // AI_ZERO_CALL fail-loud gate further down and page as if the router
+    // were down (Hostile Architect's most critical H1 finding). This is a
+    // full early-return, not a flag threaded through the rest of the route.
+    const budget = await checkDailyAiBudget(supabase, userId, prefs.daily_ai_budget_usd_cents);
+    if (budget.exceeded) {
+      const executionTime = Date.now() - startTime;
+      if (run?.id) {
+        await supabase
+          .from("pipeline_runs")
+          .update({
+            status: "completed",
+            items_processed: 0,
+            items_created: 0,
+            duration_ms: executionTime,
+            completed_at: new Date().toISOString(),
+            metadata: {
+              note: "daily_ai_budget_exceeded",
+              budget_cap_cents: budget.capCents,
+              spent_today_cents: budget.spentCents,
+            },
+          })
+          .eq("id", run.id);
+      }
+      return NextResponse.json({
+        message: "daily AI budget used up — resuming tomorrow",
+        scored: 0,
+        budgetCapCents: budget.capCents,
+        spentTodayCents: budget.spentCents,
+      });
+    }
+
     // Lookback window is per-user (score_lookback_minutes). Default 240min.
     const sinceIso = new Date(
       Date.now() - prefs.score_lookback_minutes * 60 * 1000
@@ -110,6 +145,15 @@ export async function GET(request: Request) {
         excludedTopics: prefs.excluded_topics,
       }
     );
+
+    // Post-hoc tally (H1 fix 4): record the REAL router cost of this run's
+    // batches, atomically, AFTER the calls happened — never estimated in
+    // advance. scoreArticles() may make several batch calls internally;
+    // aiCostUsd is their sum, so one increment here is equivalent to N
+    // per-batch increments summed (the router has no per-batch callback
+    // into this route, and adding one would be a bigger structural change
+    // than this slice's scope — see the H1 implementation report).
+    await recordAiSpend(supabase, userId, aiCostUsd);
 
     // ═══ FAIL-LOUD GATE (ERR-029 / lessons #104 #111) ══════════════════════
     // Real work + ZERO successful AI calls = every batch degraded (dead API

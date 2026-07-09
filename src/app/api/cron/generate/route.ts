@@ -11,6 +11,7 @@ import {
 } from "@/lib/pipeline/user-prefs";
 import { validateBriefSynthesis } from "@/lib/pipeline/brief-validation";
 import { sanitizeBriefHtml } from "@/lib/pipeline/html-sanitize";
+import { checkDailyAiBudget, recordAiSpend } from "@/lib/pipeline/ai-budget";
 
 export const maxDuration = 120;
 
@@ -223,6 +224,40 @@ export async function GET(request: Request) {
   }
 
   try {
+    // ═══ DAILY AI BUDGET ENTRY GATE (H1 fix 4) ═══════════════════════════
+    // MUST run BEFORE the pendingBriefs fetch below — a budget-capped run
+    // must NEVER reach the per-brief loop that increments aiAttempts, or it
+    // would trip the AI_ZERO_CALL fail-loud gate further down and page as
+    // if the router were down (Hostile Architect's most critical H1
+    // finding). Full early-return, not a flag threaded through the loop.
+    const budget = await checkDailyAiBudget(supabase, userId, prefs.daily_ai_budget_usd_cents);
+    if (budget.exceeded) {
+      const executionTime = Date.now() - startTime;
+      if (run?.id) {
+        await supabase
+          .from("pipeline_runs")
+          .update({
+            status: "completed",
+            items_processed: 0,
+            items_created: 0,
+            duration_ms: executionTime,
+            completed_at: new Date().toISOString(),
+            metadata: {
+              note: "daily_ai_budget_exceeded",
+              budget_cap_cents: budget.capCents,
+              spent_today_cents: budget.spentCents,
+            },
+          })
+          .eq("id", run.id);
+      }
+      return NextResponse.json({
+        message: "daily AI budget used up — resuming tomorrow",
+        generated: 0,
+        budgetCapCents: budget.capCents,
+        spentTodayCents: budget.spentCents,
+      });
+    }
+
     // Find this user's briefs that need a summary generated, scoped to "today"
     // in the user's timezone (not UTC).
     const localToday = new Date(
@@ -387,6 +422,9 @@ export async function GET(request: Request) {
         lastModel = aiModel;
         aiCallsMade += 1;
         aiTokensUsed += (aiRes.inputTokens || 0) + (aiRes.outputTokens || 0);
+        // Post-hoc tally (H1 fix 4): the REAL router cost, atomically, AFTER
+        // the call happened — never estimated in advance.
+        await recordAiSpend(supabase, userId, aiCostUsd);
       } catch (err) {
         console.error(`[Generate] AI router failed for brief ${brief.id}:`, (err as Error).message);
         failedCount++;
@@ -434,6 +472,8 @@ export async function GET(request: Request) {
           aiTokensUsed += (retryRes.inputTokens || 0) + (retryRes.outputTokens || 0);
           totalCostUsd += retryRes.costEstimateUsd;
           lastModel = retryRes.model;
+          // Post-hoc tally (H1 fix 4) — same as the first-pass call above.
+          await recordAiSpend(supabase, userId, retryRes.costEstimateUsd);
           const retrySynthesis = parseBriefResponse(retryRes.content);
           if (retrySynthesis) {
             synthesis = retrySynthesis;
