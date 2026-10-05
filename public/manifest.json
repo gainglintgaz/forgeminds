@@ -1,0 +1,11 @@
+{
+  "name": "ForgeMinds",
+  "short_name": "ForgeMinds",
+  "description": "Your Intelligence, Amplified — collect, learn, and act on what matters to you.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1730",
+  "theme_color": "#1a1730",
+  "orientation": "portrait-primary",
+  "icons": []
+}

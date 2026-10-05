@@ -1,0 +1,100 @@
+#!/usr/bin/env sh
+# ForgeMinds commit-msg hook — AUDIT GATE wording enforcement
+#
+# Mechanical enforcement of VIBE Rule 35 + Phase 5.5 Audit Gate.
+# This is the commit-msg hook (not pre-commit) because only commit-msg
+# receives the actual commit message file path as $1. Splitting:
+#   - pre-commit: tsc / eslint / verify:columns / secret-grep
+#                 (operate on staged files, run before message is composed)
+#   - commit-msg: AUDIT GATE wording + PHASE AUDIT block check
+#                 (operate on the final composed message)
+#
+# Pre-2026-05-07 the AUDIT GATE check lived in pre-commit and silently
+# never fired because pre-commit doesn't receive the message file. The
+# discipline was decoration. Discovered while running P1.0-E.
+#
+# Trigger logic:
+#
+# A. SUBJECT-LINE CHECK ONLY (first line of commit message). The body
+#    can say "complete" or "done" any number of times when describing
+#    fixes. Only the SUBJECT determines whether a phase is being
+#    declared done.
+#
+# B. Two flavors trigger the audit:
+#
+#    (1) Subject contains "phase X done|complete|finished|ship|deploy"
+#        as a phrase. Examples:
+#          "feat: phase 1 complete"
+#          "feat(phase-1): ship to production"
+#          "Phase 1.5 done"
+#       → Triggers PHASE-SPECIFIC audit checks (PHASE AUDIT block +
+#         audit file present in .claude/checklists/).
+#
+#    (2) Subject contains a generic done|complete|finished|ship|deploy
+#        word WITHOUT a phase number. Example:
+#          "feat: ship Stripe webhook"
+#          "feat: dashboard fully functional and complete"
+#       → Triggers AUDIT GATE block requirement only (no phase audit
+#         file since no specific phase is being declared done).
+#
+# This way, "fix: audit Blocker 6 (Phase 0 marked complete elsewhere)"
+# in the body never triggers anything — the subject is "fix: audit
+# Blocker 6" and that doesn't match the trigger words.
+#
+# Skip with --no-verify ONLY if Victor has explicitly approved bypassing
+# the hook.
+
+set -eu
+
+red()    { printf '\033[31m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+
+COMMIT_MSG_FILE="$1"
+
+if [ ! -f "$COMMIT_MSG_FILE" ]; then
+  red "✗ commit-msg hook: \$1 ($COMMIT_MSG_FILE) is not a file."
+  yellow "  Husky/git should pass the message file path. Check Husky setup."
+  exit 1
+fi
+
+COMMIT_MSG="$(cat "$COMMIT_MSG_FILE")"
+COMMIT_SUBJECT="$(echo "$COMMIT_MSG" | head -1)"
+
+# Phase-specific completion phrase in subject? Match "phase X (done|complete|...)"
+# tolerating one or two words between, e.g. "phase 1 audit complete".
+PHASE_REF="$(echo "$COMMIT_SUBJECT" \
+  | grep -oEi '\bphase[ -]?[0-9]+(\.[0-9]+)?\b[^.]*\b(done|complete|finished|ship|deploy)\b' \
+  | head -1 \
+  | grep -oE '[0-9]+(\.[0-9]+)?' \
+  | head -1 || true)"
+
+# Generic completion word in subject (any case, not body)?
+if echo "$COMMIT_SUBJECT" | grep -Eqi '\b(done|complete|finished|ship|deploy)\b'; then
+  if ! echo "$COMMIT_MSG" | grep -q 'AUDIT GATE'; then
+    red "✗ Commit subject uses 'done|complete|finished|ship|deploy' wording"
+    red "  but body does not include an AUDIT GATE block."
+    yellow "  Run 'npm run verify:phase-N' and paste the output block."
+    yellow "  Or rephrase the commit ('wip', 'partial', 'fix in progress', etc)."
+    exit 1
+  fi
+
+  if [ -n "$PHASE_REF" ]; then
+    # Phase-specific completion → require PHASE AUDIT block + audit file
+    PHASE_SLUG="$(echo "$PHASE_REF" | tr '.' '-')"
+
+    if ! echo "$COMMIT_MSG" | grep -q 'PHASE AUDIT'; then
+      red "✗ Commit subject declares phase $PHASE_REF complete but no PHASE AUDIT block in body."
+      yellow "  Run the phase-auditor subagent on phase $PHASE_REF, then paste its sign-off block."
+      yellow "  See .claude/checklists/phase-audit-template.md and .claude/agents/phase-auditor.md."
+      exit 1
+    fi
+
+    AUDIT_FILE_GLOB=".claude/checklists/phase-${PHASE_SLUG}-audit-*.md"
+    # shellcheck disable=SC2086
+    if ! ls $AUDIT_FILE_GLOB >/dev/null 2>&1; then
+      red "✗ No audit file found at $AUDIT_FILE_GLOB"
+      yellow "  Run the phase-auditor subagent — it writes phase-${PHASE_SLUG}-audit-<date>.md."
+      exit 1
+    fi
+  fi
+fi

@@ -1,0 +1,69 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug + deploy logs (may capture provider output/keys — never commit; secrets-handling.md §2.3)
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+# .env.example is placeholders-only and MUST be committed
+# (factory secrets-handling.md §6.2)
+!.env.example
+
+# vercel
+.vercel
+
+# cloudflare / opennext (build output, local-only vars, generated types, wrangler scratch)
+.open-next
+.dev.vars
+cloudflare-env.d.ts
+.wrangler
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# supabase CLI scratch files (linked-project, pooler-url, version pins)
+supabase/.temp/
+
+# auto-generated session reports (post-session-enforcer hook)
+SESSION_DEBRIEF.md
+CHANGELOG.md
+STATUS_REPORT.md
+WEEKLY_INSIGHTS.md
+
+# playwright test artifacts
+/test-results/
+/playwright-report/
+
+# alpha recruiting — private (contains real user names/contacts in time)
+docs/alpha/
+/blob-report/
+/playwright/.cache/
